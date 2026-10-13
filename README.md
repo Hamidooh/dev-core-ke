@@ -1,4 +1,4 @@
-# DEV CIRCLE KENYA (Silicon Savannah & Worldwide Tech Platform)
+# DEV CORE KE (Silicon Savannah & Worldwide Tech Platform)
 
 > A high-performance, full-stack platform built specifically for the **Kenyan software engineering community** to discover, analyze, and countercheck software engineering roles across the worldwide work pool and local ecosystem.
 

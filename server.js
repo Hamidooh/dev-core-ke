@@ -1644,6 +1644,15 @@ const server = http.createServer(async (req, res) => {
       const body = await parseJsonBody(req);
       const audit = analyzeCredibility(body);
 
+      let applyUrl = (body.apply_url || '').trim();
+      if (!applyUrl) {
+        if (body.company_domain) {
+          applyUrl = body.company_domain.startsWith('http') ? body.company_domain : `https://${body.company_domain.replace(/^https?:\/\//, '')}`;
+        } else if (body.contact_email) {
+          applyUrl = `mailto:${body.contact_email}?subject=Application%20for%20${encodeURIComponent(body.title)}%20at%20${encodeURIComponent(body.company)}`;
+        }
+      }
+
       db.prepare(`
         INSERT INTO jobs (
           title, company, company_domain, location, location_type, seniority, domain,
@@ -1675,7 +1684,7 @@ const server = http.createServer(async (req, res) => {
         credibility_score: audit.score,
         brs_verified: audit.score >= 80 ? 1 : 0,
         scam_risk: audit.verdict === 'HIGH_RISK_SCAM' ? 'HIGH' : (audit.verdict === 'MODERATE_VERIFY_FURTHER' ? 'MODERATE' : 'LOW'),
-        apply_url: body.apply_url || '',
+        apply_url: applyUrl,
         contact_email: body.contact_email || '',
         remote_accessible_kenya: 1,
         posted_date: new Date().toISOString().split('T')[0],

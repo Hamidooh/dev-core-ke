@@ -125,6 +125,95 @@ function resetFilters() {
   loadJobs();
 }
 
+// Smart Application Link Resolver
+function getApplyLinkData(job) {
+  const isScam = job.scam_risk === 'HIGH' || job.credibility_score < 40;
+  if (isScam) {
+    return {
+      href: `javascript:openJobDetail(${job.id})`,
+      target: '_self',
+      label: 'Flag Scam',
+      modalLabel: 'Flag Scam (View Warnings)',
+      icon: 'fa-solid fa-triangle-exclamation',
+      btnClass: 'bg-rose-600 hover:bg-rose-500 text-white'
+    };
+  }
+
+  let url = (job.apply_url || '').trim();
+
+  // If already an email mailto link
+  if (url.startsWith('mailto:')) {
+    return {
+      href: url,
+      target: '_self',
+      label: 'Apply via Email',
+      modalLabel: 'Send Application Email',
+      icon: 'fa-regular fa-envelope',
+      btnClass: 'bg-brand-600 hover:bg-brand-500 text-white'
+    };
+  }
+
+  // If standard web URL
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return {
+      href: url,
+      target: '_blank',
+      label: 'Apply',
+      modalLabel: 'Apply on Official Portal',
+      icon: 'fa-solid fa-arrow-up-right-from-square',
+      btnClass: 'bg-brand-600 hover:bg-brand-500 text-white'
+    };
+  }
+
+  // If URL lacks scheme but is a domain (e.g., "company.co.ke/careers")
+  if (url && url.includes('.')) {
+    return {
+      href: `https://${url.replace(/^\/+/, '')}`,
+      target: '_blank',
+      label: 'Apply',
+      modalLabel: 'Apply on Official Portal',
+      icon: 'fa-solid fa-arrow-up-right-from-square',
+      btnClass: 'bg-brand-600 hover:bg-brand-500 text-white'
+    };
+  }
+
+  // Fallback 1: Company Domain
+  const domain = (job.company_domain || '').trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+  if (domain && domain.includes('.')) {
+    return {
+      href: `https://${domain}`,
+      target: '_blank',
+      label: 'Apply (Site)',
+      modalLabel: `Visit ${domain}`,
+      icon: 'fa-solid fa-globe',
+      btnClass: 'bg-brand-600 hover:bg-brand-500 text-white'
+    };
+  }
+
+  // Fallback 2: Contact Email
+  const email = (job.contact_email || '').trim();
+  if (email && email.includes('@')) {
+    return {
+      href: `mailto:${email}?subject=Application%20for%20${encodeURIComponent(job.title)}%20at%20${encodeURIComponent(job.company)}`,
+      target: '_self',
+      label: 'Apply via Email',
+      modalLabel: `Email Recruiter (${email})`,
+      icon: 'fa-regular fa-envelope',
+      btnClass: 'bg-brand-600 hover:bg-brand-500 text-white'
+    };
+  }
+
+  // Fallback 3: View Details in modal
+  return {
+    href: `javascript:openJobDetail(${job.id})`,
+    target: '_self',
+    label: 'Details',
+    modalLabel: 'Contact Recruiter Directly',
+    icon: 'fa-solid fa-circle-info',
+    btnClass: 'bg-slate-700 hover:bg-slate-600 text-white'
+  };
+}
+
 // Render Individual Job Card
 function renderJobCard(job) {
   const seniorityLabelMap = {
@@ -185,6 +274,7 @@ function renderJobCard(job) {
   const tags = (job.tags || '').split(',').filter(Boolean);
   const today = new Date().toISOString().split('T')[0];
   const isToday = job.posted_date === today;
+  const applyAction = getApplyLinkData(job);
 
   return `
     <div class="job-card bg-surface-850 border ${isScam ? 'border-rose-500/40' : 'border-surface-700/80'} rounded-2xl p-5 flex flex-col justify-between">
@@ -241,17 +331,18 @@ function renderJobCard(job) {
         <div class="flex items-center gap-2">
           <button 
             onclick="openJobDetail(${job.id})" 
-            class="px-3 py-1.5 rounded-lg bg-surface-800 hover:bg-surface-700 text-slate-200 border border-surface-650 font-semibold transition"
+            class="px-3 py-1.5 rounded-lg bg-surface-800 hover:bg-surface-700 text-slate-200 border border-surface-650 font-semibold transition cursor-pointer"
           >
             Countercheck & Details
           </button>
           <a 
-            href="${job.apply_url || '#'}" 
-            target="_blank" 
+            href="${applyAction.href}" 
+            ${applyAction.target ? `target="${applyAction.target}"` : ''} 
             rel="noopener noreferrer"
-            class="px-3.5 py-1.5 rounded-lg ${isScam ? 'bg-rose-600 hover:bg-rose-500' : 'bg-brand-600 hover:bg-brand-500'} text-white font-bold transition shadow-sm"
+            class="px-3.5 py-1.5 rounded-lg ${applyAction.btnClass} font-bold transition shadow-sm inline-flex items-center gap-1.5 cursor-pointer"
           >
-            ${isScam ? 'Flag Scam' : 'Apply'}
+            <i class="${applyAction.icon}"></i>
+            <span>${applyAction.label}</span>
           </a>
         </div>
       </div>
@@ -268,6 +359,7 @@ function openJobDetail(id) {
   const container = document.getElementById('job-detail-content');
 
   const isScam = job.scam_risk === 'HIGH' || job.credibility_score < 40;
+  const applyAction = getApplyLinkData(job);
 
   container.innerHTML = `
     <div>
@@ -339,11 +431,12 @@ function openJobDetail(id) {
         </div>
 
         <div class="flex items-center gap-2">
-          <button onclick="closeModal('modal-job-detail')" class="px-4 py-2 rounded-xl bg-surface-800 hover:bg-surface-700 text-slate-300 text-xs font-semibold">
+          <button onclick="closeModal('modal-job-detail')" class="px-4 py-2 rounded-xl bg-surface-800 hover:bg-surface-700 text-slate-300 text-xs font-semibold cursor-pointer">
             Close
           </button>
-          <a href="${job.apply_url || '#'}" target="_blank" rel="noopener noreferrer" class="px-5 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold shadow-lg shadow-brand-500/20">
-            Apply on Official Portal <i class="fa-solid fa-arrow-up-right-from-square ml-1"></i>
+          <a href="${applyAction.href}" ${applyAction.target ? `target="${applyAction.target}"` : ''} rel="noopener noreferrer" class="px-5 py-2 rounded-xl ${applyAction.btnClass} text-xs font-bold shadow-lg inline-flex items-center gap-2 cursor-pointer">
+            <i class="${applyAction.icon}"></i>
+            <span>${applyAction.modalLabel}</span>
           </a>
         </div>
       </div>
@@ -658,6 +751,7 @@ async function handlePostJob(e) {
   const salary_kes_max = document.getElementById('post-salary-max').value || 100000;
   const company_domain = document.getElementById('post-domain-site').value;
   const contact_email = document.getElementById('post-email').value;
+  const apply_url = document.getElementById('post-apply-url')?.value || '';
   const description = document.getElementById('post-desc').value;
   const requirements = document.getElementById('post-reqs').value;
 
@@ -668,7 +762,7 @@ async function handlePostJob(e) {
       body: JSON.stringify({
         title, company, seniority, domain, location_type,
         salary_kes_min, salary_kes_max, company_domain,
-        contact_email, description, requirements
+        contact_email, apply_url, description, requirements
       })
     });
     if (res.ok) {

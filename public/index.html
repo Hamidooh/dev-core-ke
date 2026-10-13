@@ -126,10 +126,28 @@
   <div class="hero-section bg-gradient-to-b from-white via-slate-50 to-slate-100 border-b border-slate-200 pt-8 pb-10 px-4 transition-colors">
     <div class="max-w-7xl mx-auto">
       <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-        <div class="max-w-3xl">
-          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-surface-800 border border-slate-200 text-xs font-mono text-brand-500 mb-3 shadow-xs">
-            <span class="w-2 h-2 rounded-full bg-brand-500 animate-ping"></span>
-            Real-time Kenyan & Global Workpool Monitoring
+          <!-- Autonomous Hourly Scanner Control Pill -->
+          <div class="flex flex-wrap items-center gap-2 mb-3">
+            <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface-800 border border-slate-300 text-xs font-mono text-slate-800 shadow-xs">
+              <span id="scanner-pulse-dot" class="relative flex h-2.5 w-2.5">
+                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+              </span>
+              <span class="font-bold text-slate-900">Hourly Scanner:</span>
+              <span id="scanner-status-text" class="text-emerald-700 font-semibold">Active (Hourly)</span>
+              <span class="text-slate-400">•</span>
+              <span id="scanner-last-sync" class="text-slate-600">Syncing...</span>
+            </div>
+
+            <button onclick="triggerManualScan()" id="btn-manual-scan" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white hover:bg-slate-50 text-brand-700 border border-brand-300 text-xs font-semibold transition cursor-pointer shadow-xs" title="Trigger an immediate scan for new tech roles">
+              <i id="scan-btn-icon" class="fa-solid fa-arrows-rotate text-brand-600"></i>
+              <span id="scan-btn-label">Scan Now</span>
+            </button>
+
+            <button onclick="openModal('modal-scanner-logs')" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-800 hover:bg-surface-700 text-slate-700 border border-slate-300 text-xs font-semibold transition cursor-pointer shadow-xs" title="View live scan activity logs and 24/7 keep-alive status">
+              <i class="fa-solid fa-clock-rotate-left text-slate-600"></i>
+              <span>Live Logs</span>
+            </button>
           </div>
           <h1 class="hero-title text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-slate-900 leading-tight">
             Find Software Engineering Roles. <br/>
@@ -783,6 +801,120 @@
           <button type="submit" class="px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-white font-bold">Publish Verified Job</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- MODAL: HOURLY SCANNER & KEEP-ALIVE LOGS   -->
+  <!-- ========================================== -->
+  <div id="modal-scanner-logs" class="fixed inset-0 z-50 hidden bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-surface-850 border border-surface-700 rounded-2xl max-w-3xl w-full max-h-[92vh] overflow-y-auto p-6 shadow-2xl relative text-slate-200">
+      <button onclick="closeModal('modal-scanner-logs')" class="absolute top-4 right-4 text-slate-400 hover:text-white text-lg">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+
+      <div class="flex items-center gap-3 mb-5">
+        <div class="w-11 h-11 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center text-xl">
+          <i class="fa-solid fa-satellite-dish"></i>
+        </div>
+        <div>
+          <h3 class="text-lg font-bold text-white flex items-center gap-2">
+            Autonomous Role Scanner & Keep-Alive Diagnostics
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-900/60 text-emerald-300 border border-emerald-500/30">
+              ● 24/7 ACTIVE
+            </span>
+          </h3>
+          <p class="text-xs text-slate-400">
+            Continuously monitors global remote endpoints and Kenyan tech ecosystem hubs hourly.
+          </p>
+        </div>
+      </div>
+
+      <!-- Quick Metrics Grid -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5 text-xs">
+        <div class="bg-surface-900/90 border border-surface-750 p-3 rounded-xl">
+          <div class="text-[11px] font-mono text-slate-400">Scanner Frequency</div>
+          <div class="text-sm font-bold text-white mt-1">Hourly (60m)</div>
+          <div class="text-[10px] text-emerald-400 mt-0.5">Autonomous Daemon</div>
+        </div>
+        <div class="bg-surface-900/90 border border-surface-750 p-3 rounded-xl">
+          <div class="text-[11px] font-mono text-slate-400">Self-Keep-Alive</div>
+          <div class="text-sm font-bold text-emerald-400 mt-1">Every 10 mins</div>
+          <div class="text-[10px] text-slate-400 mt-0.5">Render Ping Heartbeat</div>
+        </div>
+        <div class="bg-surface-900/90 border border-surface-750 p-3 rounded-xl">
+          <div class="text-[11px] font-mono text-slate-400">Last Successful Scan</div>
+          <div id="modal-scanner-last-run" class="text-sm font-bold text-white mt-1 truncate">Checking...</div>
+          <div class="text-[10px] text-slate-400 mt-0.5" id="modal-scanner-roles-added">0 roles added</div>
+        </div>
+        <div class="bg-surface-900/90 border border-surface-750 p-3 rounded-xl">
+          <div class="text-[11px] font-mono text-slate-400">Next Scheduled Scan</div>
+          <div id="modal-scanner-next-run" class="text-sm font-bold text-sky-400 mt-1 truncate">In ~55 mins</div>
+          <div class="text-[10px] text-slate-400 mt-0.5">Auto-Refreshes Board</div>
+        </div>
+      </div>
+
+      <!-- Render Free-Tier 24/7 Keep-Alive Guide Banner -->
+      <div class="bg-brand-950/40 border border-brand-800/60 rounded-xl p-4 mb-5 text-xs">
+        <div class="flex items-start gap-3">
+          <i class="fa-solid fa-server text-brand-400 text-lg mt-0.5"></i>
+          <div class="flex-1">
+            <h4 class="font-bold text-white text-sm">24/7 Continuous Operation on Render</h4>
+            <p class="text-slate-300 mt-1 leading-relaxed">
+              DEV CORE KE runs an internal keep-alive loop that pulses <code class="px-1.5 py-0.5 rounded bg-surface-900 font-mono text-brand-300">/api/ping</code> every 10 minutes. For guaranteed 100% uptime without free-tier cold starts, add your external URL to any free ping monitor (e.g., <strong class="text-white">UptimeRobot</strong>, <strong class="text-white">cron-job.org</strong>):
+            </p>
+            <div class="flex items-center gap-2 mt-2.5">
+              <input id="input-keepalive-url" readonly type="text" class="flex-1 px-3 py-1.5 bg-surface-900 border border-surface-700 rounded-lg font-mono text-xs text-brand-300 select-all" value="">
+              <button onclick="copyKeepAliveUrl()" class="px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white font-semibold transition shrink-0">
+                <i class="fa-regular fa-copy mr-1"></i> Copy URL
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Scan History Table -->
+      <div class="mb-4">
+        <div class="flex items-center justify-between mb-2">
+          <h4 class="font-bold text-white text-sm flex items-center gap-1.5">
+            <i class="fa-solid fa-list-ul text-slate-400"></i> Recent Scan Executions
+          </h4>
+          <span class="text-[11px] font-mono text-slate-400">Live SQLite Audit Log</span>
+        </div>
+
+        <div class="border border-surface-750 rounded-xl overflow-hidden bg-surface-900/60">
+          <table class="w-full text-left text-xs">
+            <thead class="bg-surface-800/80 text-slate-400 border-b border-surface-750 font-mono text-[11px]">
+              <tr>
+                <th class="py-2.5 px-3">Scan Time</th>
+                <th class="py-2.5 px-3">Sources</th>
+                <th class="py-2.5 px-3 text-center">Found</th>
+                <th class="py-2.5 px-3 text-center">New Added</th>
+                <th class="py-2.5 px-3">Status</th>
+              </tr>
+            </thead>
+            <tbody id="scanner-logs-table-body" class="divide-y divide-surface-800 font-sans">
+              <tr>
+                <td colspan="5" class="py-6 text-center text-slate-400">Loading scan logs...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between pt-3 border-t border-surface-750">
+        <span class="text-[11px] text-slate-400">
+          🛡️ Every ingested role is evaluated by the Credibility & BRS Verification Engine.
+        </span>
+        <div class="flex items-center gap-2">
+          <button onclick="triggerManualScan()" class="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition flex items-center gap-1.5">
+            <i class="fa-solid fa-arrows-rotate"></i> Run Scan Now
+          </button>
+          <button onclick="closeModal('modal-scanner-logs')" class="px-4 py-2 rounded-xl bg-surface-800 hover:bg-surface-700 text-slate-200 font-semibold text-xs transition">
+            Close
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 

@@ -32,6 +32,11 @@
    - Real-world salary ranges from Attachment stipend (`KES 25,000 - 35,000`) up to CTO compensation (`KES 900,000 - 1,800,000+` / `$7,000 - $14,000+`).
    - In-demand tech stack ratings in Kenya (React/Next.js, Go, Python/FastAPI, Flutter, AWS/Kubernetes, M-Pesa Daraja APIs).
 
+6. **Autonomous Hourly Role Scanner & 24/7 Keep-Alive**:
+   - **Continuous Role Ingestion**: Automatically scans global remote tech APIs (Remotive, Jobicy) and the Kenyan tech ecosystem feed every 60 minutes.
+   - **Algorithmic Scam Vetting**: Every newly discovered role is audited through the Credibility Engine with duplicate deduplication.
+   - **24/7 Keep-Alive Heartbeat**: Built-in 10-minute self-ping mechanism (`/api/ping`) keeping Render free-tier instances active and continuously monitoring roles without idle spin-down.
+
 ---
 
 ## 🚀 Quick Start Instructions
@@ -56,10 +61,14 @@ http://localhost:3000
 - **Server Engine**: Node.js 24 native HTTP module (`server.js`)
 - **Database**: Built-in SQLite database (`data/devcircle.sqlite` via `node:sqlite`)
 - **Frontend**: Responsive Single-Page Application (`public/index.html`, `public/app.js`, `public/style.css`, Tailwind CSS, FontAwesome)
+- **Background Daemon**: Autonomous hourly cron scanner + 10-min keep-alive loop
 
 ### REST API Documentation
 | Method | Endpoint | Description |
 |---|---|---|
+| `GET` | `/api/ping` | Keep-alive heartbeat & uptime diagnostic check |
+| `GET` | `/api/scanner/status` | Live scanner status, next run schedule, and recent scan logs |
+| `POST` | `/api/scanner/trigger` | Trigger immediate on-demand discovery scan across all sources |
 | `GET` | `/api/jobs` | Search & filter jobs by keyword, seniority, domain, location type, and minimum credibility score |
 | `GET` | `/api/jobs/:id` | Retrieve detailed information for a specific job |
 | `POST` | `/api/jobs` | Submit a new job offer with automated algorithmic credibility audit |

@@ -7,6 +7,8 @@ document.addEventListener('DOMContentLoaded', () => {
   loadRolesMatrix();
   loadAnalytics();
   loadReviews();
+  loadScannerStatus();
+  setInterval(loadScannerStatus, 45000);
 });
 
 // Tab Switcher
@@ -181,15 +183,20 @@ function renderJobCard(job) {
   }
 
   const tags = (job.tags || '').split(',').filter(Boolean);
+  const today = new Date().toISOString().split('T')[0];
+  const isToday = job.posted_date === today;
 
   return `
     <div class="job-card bg-surface-850 border ${isScam ? 'border-rose-500/40' : 'border-surface-700/80'} rounded-2xl p-5 flex flex-col justify-between">
       <div>
         <!-- Top Metadata & Credibility Badge -->
-        <div class="flex items-start justify-between gap-3 mb-2.5">
-          <span class="px-2.5 py-0.5 rounded-md text-xs font-mono font-semibold badge-${job.seniority}">
-            ${seniorityLabelMap[job.seniority] || job.seniority}
-          </span>
+        <div class="flex items-start justify-between gap-2 mb-2.5">
+          <div class="flex flex-wrap items-center gap-1.5">
+            <span class="px-2.5 py-0.5 rounded-md text-xs font-mono font-semibold badge-${job.seniority}">
+              ${seniorityLabelMap[job.seniority] || job.seniority}
+            </span>
+            ${isToday ? `<span class="inline-flex items-center gap-1 text-[10px] font-bold text-sky-900 bg-sky-100 border border-sky-300 px-2 py-0.5 rounded shadow-2xs"><i class="fa-solid fa-sparkles text-sky-600"></i> Added Today</span>` : ''}
+          </div>
           ${credibilityBadge}
         </div>
 
@@ -737,5 +744,165 @@ function closeModal(modalId) {
   if (modal) {
     modal.classList.add('hidden');
     document.body.classList.remove('modal-open');
+  }
+}
+
+// ============================================================================
+// 🤖 AUTONOMOUS SCANNER & KEEP-ALIVE CLIENT CONTROLLER
+// ============================================================================
+
+function formatTimeAgo(isoString) {
+  if (!isoString) return 'Pending first run';
+  const diffMs = Date.now() - new Date(isoString).getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  if (diffMins < 1) return 'Just now';
+  if (diffMins === 1) return '1 min ago';
+  if (diffMins < 60) return `${diffMins} mins ago`;
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours === 1) return '1 hr ago';
+  return `${diffHours} hrs ago`;
+}
+
+function formatNextRun(isoString) {
+  if (!isoString) return 'In ~60 mins';
+  const diffMs = new Date(isoString).getTime() - Date.now();
+  const diffMins = Math.ceil(diffMs / 60000);
+  if (diffMins <= 0) return 'Any moment now';
+  if (diffMins === 1) return 'In ~1 min';
+  return `In ~${diffMins} mins`;
+}
+
+async function loadScannerStatus() {
+  try {
+    const res = await fetch('/api/scanner/status');
+    if (!res.ok) return;
+    const data = await res.json();
+    const { scanner, logs } = data;
+
+    // 1. Update Hero Pill
+    const lastSyncEl = document.getElementById('scanner-last-sync');
+    const statusTextEl = document.getElementById('scanner-status-text');
+    const keepaliveInput = document.getElementById('input-keepalive-url');
+
+    if (keepaliveInput) {
+      keepaliveInput.value = `${window.location.origin}/api/ping`;
+    }
+
+    if (scanner.isScanning) {
+      if (statusTextEl) {
+        statusTextEl.textContent = 'Scanning feeds...';
+        statusTextEl.className = 'text-sky-700 font-semibold animate-pulse';
+      }
+      if (lastSyncEl) lastSyncEl.textContent = 'In progress';
+    } else {
+      if (statusTextEl) {
+        statusTextEl.textContent = 'Active (Hourly)';
+        statusTextEl.className = 'text-emerald-700 font-semibold';
+      }
+      if (lastSyncEl) {
+        lastSyncEl.textContent = `Last run: ${formatTimeAgo(scanner.lastScanTime)}`;
+      }
+    }
+
+    // 2. Update Modal Diagnostics
+    const modalLastRun = document.getElementById('modal-scanner-last-run');
+    const modalNextRun = document.getElementById('modal-scanner-next-run');
+    const modalRolesAdded = document.getElementById('modal-scanner-roles-added');
+    const logsTbody = document.getElementById('scanner-logs-table-body');
+
+    if (modalLastRun) {
+      modalLastRun.textContent = scanner.lastScanTime ? formatTimeAgo(scanner.lastScanTime) : 'Starting up...';
+    }
+    if (modalNextRun) {
+      modalNextRun.textContent = formatNextRun(scanner.nextScanTime);
+    }
+    if (modalRolesAdded) {
+      modalRolesAdded.textContent = `${scanner.totalRolesAdded} roles added (${scanner.totalScans} runs)`;
+    }
+
+    // 3. Render Scan Logs Table
+    if (logsTbody && logs) {
+      if (logs.length === 0) {
+        logsTbody.innerHTML = `
+          <tr>
+            <td colspan="5" class="py-6 text-center text-slate-400">
+              <i class="fa-solid fa-spinner fa-spin mr-2"></i> Initializing first hourly scan daemon...
+            </td>
+          </tr>
+        `;
+      } else {
+        logsTbody.innerHTML = logs.map(log => {
+          const scanDate = new Date(log.scan_time);
+          const timeFormatted = scanDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          const dateFormatted = scanDate.toLocaleDateString([], { month: 'short', day: 'numeric' });
+          const isSuccess = log.status === 'SUCCESS';
+
+          return `
+            <tr class="hover:bg-surface-800/50 transition">
+              <td class="py-2.5 px-3 whitespace-nowrap text-slate-300 font-mono text-[11px]">
+                ${dateFormatted} ${timeFormatted}
+              </td>
+              <td class="py-2.5 px-3 text-slate-200">
+                <span class="truncate block max-w-xs text-xs" title="${log.source}">${log.source}</span>
+              </td>
+              <td class="py-2.5 px-3 text-center font-mono font-bold text-slate-300">
+                ${log.roles_found}
+              </td>
+              <td class="py-2.5 px-3 text-center font-mono font-bold ${log.roles_added > 0 ? 'text-emerald-400' : 'text-slate-400'}">
+                +${log.roles_added}
+              </td>
+              <td class="py-2.5 px-3">
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-bold ${isSuccess ? 'bg-emerald-950 text-emerald-300 border border-emerald-700/60' : 'bg-rose-950 text-rose-300 border border-rose-700/60'}">
+                  ${isSuccess ? '<i class="fa-solid fa-check text-[9px]"></i> SUCCESS' : '<i class="fa-solid fa-triangle-exclamation text-[9px]"></i> FAILED'}
+                </span>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      }
+    }
+  } catch (err) {
+    console.warn('Scanner status check:', err);
+  }
+}
+
+async function triggerManualScan() {
+  const btn = document.getElementById('btn-manual-scan');
+  const icon = document.getElementById('scan-btn-icon');
+  const label = document.getElementById('scan-btn-label');
+
+  if (icon) icon.className = 'fa-solid fa-arrows-rotate fa-spin text-brand-600';
+  if (label) label.textContent = 'Scanning...';
+  if (btn) btn.disabled = true;
+
+  try {
+    const res = await fetch('/api/scanner/trigger', { method: 'POST' });
+    const data = await res.json();
+
+    if (data.status === 'success') {
+      alert(`✅ Hourly Scanner Complete!\n\n${data.roles_found} roles evaluated across Remotive, Jobicy & Kenyan tech feeds.\n${data.roles_added} new verified roles added to DEV CORE KE.\nNext automated scan scheduled for: ${new Date(data.next_scan_time).toLocaleTimeString()}`);
+      loadJobs();
+      loadScannerStatus();
+    } else {
+      alert(data.message || 'Scan was already running or encountered a minor issue.');
+    }
+  } catch (err) {
+    alert('Failed to trigger scan: ' + err.message);
+  } finally {
+    if (icon) icon.className = 'fa-solid fa-arrows-rotate text-brand-600';
+    if (label) label.textContent = 'Scan Now';
+    if (btn) btn.disabled = false;
+  }
+}
+
+function copyKeepAliveUrl() {
+  const input = document.getElementById('input-keepalive-url');
+  if (input) {
+    input.select();
+    navigator.clipboard.writeText(input.value).then(() => {
+      alert(`Copied Keep-Alive URL to clipboard:\n${input.value}\n\nAdd this to UptimeRobot or Cron-job.org with a 5 or 10-minute interval to keep Render active 24/7!`);
+    }).catch(() => {
+      prompt('Copy this Keep-Alive URL:', input.value);
+    });
   }
 }

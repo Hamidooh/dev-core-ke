@@ -1,0 +1,491 @@
+/* ==========================================================================
+   DEV CORE KE - SHADOW SILVER THEME (#BEBEBE)
+   Official Single Brand Theme: Sleek Shadow Silver canvas, high-contrast slate,
+   and Kenyan Silicon Savannah royal blue & emerald accents.
+   ========================================================================== */
+
+@layer utilities {
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+  .scrollbar-none {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+/* Base Body Styles */
+body {
+  background-color: #BEBEBE !important;
+  color: #0f172a !important;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  overflow-x: hidden;
+}
+
+/* Announcement Top Bar */
+header {
+  background: linear-gradient(to right, #b0b0b0, #bebebe, #b0b0b0) !important;
+  border-color: #a3a3a3 !important;
+  color: #1e293b !important;
+}
+
+header span {
+  color: #1e293b !important;
+}
+
+header .text-slate-300,
+header .text-slate-400,
+header .text-slate-500,
+header .text-slate-600 {
+  color: #334155 !important;
+}
+
+/* Main Navigation */
+nav {
+  background-color: rgba(190, 190, 190, 0.95) !important;
+  border-color: #a3a3a3 !important;
+  box-shadow: 0 2px 6px 0 rgba(0, 0, 0, 0.08) !important;
+}
+
+/* Hero Section */
+.hero-section {
+  background: linear-gradient(to bottom, #cacaca, #bebebe) !important;
+  border-color: #a3a3a3 !important;
+}
+
+.hero-title {
+  color: #0f172a !important;
+}
+
+.hero-subtitle-gradient {
+  background: linear-gradient(to right, #1d4ed8, #0369a1, #047857) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+}
+
+/* Surfaces */
+.bg-surface-900 {
+  background-color: #adadad !important;
+  color: #0f172a !important;
+  border-color: #9e9e9e !important;
+}
+
+.bg-surface-850 {
+  background-color: #cdcdcd !important;
+  color: #0f172a !important;
+  border-color: #a3a3a3 !important;
+  box-shadow: 0 2px 6px -1px rgba(0, 0, 0, 0.08), 0 1px 3px -1px rgba(0, 0, 0, 0.06) !important;
+}
+
+.bg-surface-800 {
+  background-color: #c4c4c4 !important;
+  color: #1e293b !important;
+  border-color: #a3a3a3 !important;
+}
+
+.border-surface-800,
+.border-surface-750,
+.border-surface-700,
+.border-surface-650 {
+  border-color: #a3a3a3 !important;
+}
+
+/* Typography */
+.text-white {
+  color: #0f172a !important;
+}
+
+.text-slate-100,
+.text-slate-200 {
+  color: #0f172a !important;
+}
+
+.text-slate-300 {
+  color: #1e293b !important;
+}
+
+.text-slate-400 {
+  color: #334155 !important;
+}
+
+.text-slate-500 {
+  color: #475569 !important;
+}
+
+.text-slate-600 {
+  color: #1e293b !important;
+}
+
+/* Brand Primary - Royal Blue */
+.bg-brand-600 {
+  background-color: #1d4ed8 !important;
+  color: #ffffff !important;
+}
+
+.bg-brand-600:hover,
+.hover\:bg-brand-500:hover {
+  background-color: #1e40af !important;
+}
+
+.bg-brand-500 {
+  background-color: #1d4ed8 !important;
+  color: #ffffff !important;
+}
+
+.text-brand-500,
+.text-brand-400 {
+  color: #1d4ed8 !important;
+}
+
+.bg-brand-500\/20,
+.bg-brand-500\/10 {
+  background-color: #dbeafe !important;
+  color: #1e40af !important;
+  border-color: #93c5fd !important;
+}
+
+.border-brand-500\/30 {
+  border-color: #93c5fd !important;
+}
+
+/* Tab Navigation Buttons */
+.tab-button {
+  color: #334155 !important;
+}
+
+.tab-button:hover {
+  color: #0f172a !important;
+  background-color: #b5b5b5 !important;
+}
+
+.tab-button.active {
+  color: #1d4ed8 !important;
+  background-color: #cdcdcd !important;
+  border-bottom: 2px solid #1d4ed8 !important;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Job Cards */
+.job-card {
+  background-color: #d4d4d4 !important;
+  border: 1px solid #a8a8a8 !important;
+  box-shadow: 0 2px 5px -1px rgba(0, 0, 0, 0.08), 0 1px 3px -1px rgba(0, 0, 0, 0.05) !important;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s ease;
+}
+
+.job-card:hover {
+  border-color: #1d4ed8 !important;
+  box-shadow: 0 10px 20px -3px rgba(0, 0, 0, 0.16) !important;
+  transform: translateY(-2px);
+}
+
+.job-card h3 {
+  color: #0f172a !important;
+}
+
+.job-card h3:hover {
+  color: #1d4ed8 !important;
+}
+
+.job-card button {
+  background-color: #bebebe !important;
+  border-color: #9e9e9e !important;
+  color: #0f172a !important;
+}
+
+.job-card button:hover {
+  background-color: #b0b0b0 !important;
+  border-color: #8c8c8c !important;
+}
+
+.job-card .bg-surface-900 {
+  background-color: #bebebe !important;
+  color: #1e293b !important;
+  border-color: #a3a3a3 !important;
+}
+
+/* Job Domain Badge - Crisp Clear High-Contrast Blending */
+.job-domain-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #1e3a8a !important;
+  background-color: rgba(30, 58, 138, 0.12) !important;
+  border: 1px solid rgba(30, 58, 138, 0.3) !important;
+  padding: 0.15rem 0.5rem;
+  border-radius: 0.375rem;
+  letter-spacing: -0.01em;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.job-domain-badge i {
+  color: #1d4ed8 !important;
+}
+
+/* High-Contrast Credibility & Compensation Badges */
+.bg-emerald-100 {
+  background-color: #d1fae5 !important;
+  color: #064e3b !important;
+}
+
+.text-emerald-950,
+.text-emerald-900,
+.text-emerald-400 {
+  color: #064e3b !important;
+}
+
+.border-emerald-300 {
+  border-color: #6ee7b7 !important;
+}
+
+.bg-amber-100 {
+  background-color: #fef3c7 !important;
+  color: #78350f !important;
+}
+
+.text-amber-950,
+.text-amber-900,
+.text-amber-400 {
+  color: #78350f !important;
+}
+
+.border-amber-300 {
+  border-color: #fcd34d !important;
+}
+
+.bg-rose-100 {
+  background-color: #ffe4e6 !important;
+  color: #881337 !important;
+}
+
+.text-rose-950,
+.text-rose-900,
+.text-rose-400 {
+  color: #881337 !important;
+}
+
+.border-rose-300 {
+  border-color: #fda4af !important;
+}
+
+/* Form Controls */
+input,
+select,
+textarea {
+  background-color: #e2e2e2 !important;
+  border-color: #9e9e9e !important;
+  color: #0f172a !important;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #64748b !important;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  background-color: #ececec !important;
+  border-color: #1d4ed8 !important;
+  box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.2) !important;
+}
+
+/* Modals */
+#modal-job-detail > div,
+#modal-write-review > div,
+#modal-post-job > div {
+  background-color: #cdcdcd !important;
+  border-color: #9e9e9e !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.35) !important;
+}
+
+#modal-job-detail .bg-surface-900 {
+  background-color: #bebebe !important;
+  border-color: #a3a3a3 !important;
+  color: #1e293b !important;
+}
+
+/* Seniority Badges */
+.badge-attachment {
+  background-color: #bae6fd !important;
+  color: #0369a1 !important;
+  border: 1px solid #7dd3fc !important;
+}
+
+.badge-internship {
+  background-color: #c7d2fe !important;
+  color: #3730a3 !important;
+  border: 1px solid #a5b4fc !important;
+}
+
+.badge-junior {
+  background-color: #bbf7d0 !important;
+  color: #166534 !important;
+  border: 1px solid #86efac !important;
+}
+
+.badge-mid {
+  background-color: #99f6e4 !important;
+  color: #115e59 !important;
+  border: 1px solid #5eead4 !important;
+}
+
+.badge-senior {
+  background-color: #e9d5ff !important;
+  color: #6b21a8 !important;
+  border: 1px solid #d8b4fe !important;
+}
+
+.badge-lead_manager {
+  background-color: #fde68a !important;
+  color: #92400e !important;
+  border: 1px solid #fcd34d !important;
+}
+
+.badge-cto {
+  background-color: #fecdd3 !important;
+  color: #9f1239 !important;
+  border: 1px solid #fda4af !important;
+}
+
+/* Salary & Analytics Table */
+table thead {
+  background-color: #b8b8b8 !important;
+  color: #1e293b !important;
+  border-color: #9e9e9e !important;
+}
+
+table tbody tr {
+  border-color: #a3a3a3 !important;
+}
+
+table tbody tr:hover {
+  background-color: #bebebe !important;
+}
+
+table td {
+  color: #1e293b !important;
+}
+
+table td.text-white {
+  color: #0f172a !important;
+}
+
+table td.text-emerald-400 {
+  color: #15803d !important;
+}
+
+table td.text-teal-300 {
+  color: #0369a1 !important;
+}
+
+/* Skills progress bar track */
+#skills-demand-bars .bg-surface-900 {
+  background-color: #a8a8a8 !important;
+  border-color: #949494 !important;
+}
+
+/* Footer */
+footer {
+  background-color: #b5b5b5 !important;
+  border-color: #9e9e9e !important;
+  color: #334155 !important;
+}
+
+footer strong {
+  color: #0f172a !important;
+}
+
+/* Hero Stat Cards */
+.hero-stat-card {
+  border-radius: 0.875rem;
+  padding: 0.875rem 1rem;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  position: relative;
+  overflow: hidden;
+  background-color: rgba(228, 228, 228, 0.88) !important;
+  border: 1px solid rgba(140, 140, 140, 0.5) !important;
+  box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.7) !important;
+}
+
+.hero-stat-card:hover {
+  transform: translateY(-2px);
+  background-color: rgba(240, 240, 240, 0.95) !important;
+  border-color: #1d4ed8 !important;
+  box-shadow: 0 8px 18px -4px rgba(29, 78, 216, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
+}
+
+.hero-stat-label {
+  font-size: 0.75rem;
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 0.02em;
+  color: #334155 !important;
+  font-weight: 600;
+}
+
+.hero-stat-value {
+  font-size: 1.15rem;
+  font-weight: 800;
+  margin-top: 0.25rem;
+  line-height: 1.25;
+  color: #0f172a !important;
+}
+
+.hero-stat-value-blue {
+  color: #1d4ed8 !important;
+}
+
+.hero-stat-value-amber {
+  color: #b45309 !important;
+}
+
+.hero-stat-sub {
+  font-size: 0.6875rem;
+  margin-top: 0.25rem;
+  font-weight: 600;
+}
+
+.hero-stat-sub-emerald {
+  color: #15803d !important;
+}
+
+.hero-stat-sub-sky {
+  color: #0369a1 !important;
+}
+
+.hero-stat-sub-muted {
+  color: #475569 !important;
+}
+
+/* Animations & Modals */
+.meter-fill {
+  transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.modal-open {
+  overflow: hidden;
+}
+
+/* Scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #b5b5b5;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #949494;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #7a7a7a;
+}

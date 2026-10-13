@@ -1,0 +1,22 @@
+{
+  "name": "dev-core-ke",
+  "version": "1.0.0",
+  "description": "DEV CORE KE - Kenyan & Global Tech Job Aggregator, Market Intelligence & Company Credibility Platform",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "keywords": [
+    "kenya-tech",
+    "software-engineering",
+    "job-board",
+    "company-credibility",
+    "silicon-savannah",
+    "remote-work"
+  ],
+  "author": "DEV CORE KE",
+  "license": "MIT"
+}

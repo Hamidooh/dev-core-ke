@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DEV CORE KE | Kenyan & Worldwide Tech Roles & Credibility Platform</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome Icons CDN -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+          },
+          colors: {
+            brand: {
+              50: '#ecfdf5',
+              100: '#d1fae5',
+              500: '#10b981',
+              600: '#059669',
+              700: '#047857',
+              900: '#064e3b',
+              accent: '#f59e0b',
+              red: '#ef4444',
+            },
+            surface: {
+              900: '#090d16',
+              850: '#0d1322',
+              800: '#12192c',
+              700: '#1c253d',
+              600: '#283452',
+            }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="font-sans min-h-screen flex flex-col">
+
+  <!-- Top Announcement Bar -->
+  <header class="bg-gradient-to-r from-blue-50 via-slate-50 to-white border-b border-slate-200 text-xs py-2 px-4 transition-colors">
+    <div class="max-w-7xl mx-auto flex flex-wrap justify-between items-center gap-2">
+      <div class="flex items-center gap-2">
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-brand-500/10 text-brand-500 border border-brand-500/30">
+          🇰🇪 KENYA TECH INTELLIGENCE
+        </span>
+        <span class="text-slate-600 hidden sm:inline">
+          Bridging Kenyan developers to Local Silicon Savannah & Worldwide Remote opportunities with verified credibility.
+        </span>
+      </div>
+      <div class="flex items-center gap-4 text-slate-500">
+        <span class="flex items-center gap-1.5"><i class="fa-solid fa-shield-halved text-brand-500"></i> Scam-Free Verification Engine</span>
+        <span class="flex items-center gap-1.5"><i class="fa-solid fa-graduation-cap text-sky-500"></i> NITA Attachment & CTO Spectrum</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Navigation -->
+  <nav class="sticky top-0 z-50 backdrop-blur-md bg-white/95 border-b border-slate-200 px-4 py-3 transition-colors shadow-sm">
+    <div class="max-w-7xl mx-auto flex justify-between items-center">
+      <!-- Logo -->
+      <div class="flex items-center gap-3 cursor-pointer" onclick="switchTab('jobs')">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-blue-500 flex items-center justify-center text-white shadow-md shadow-brand-500/20">
+          <i class="fa-solid fa-circle-nodes text-xl"></i>
+        </div>
+        <div>
+          <div class="text-xl font-extrabold tracking-tight flex items-center gap-1.5 text-slate-900">
+            DEV CORE <span class="text-xs px-2 py-0.5 rounded-full bg-brand-600 text-white font-bold">KE</span>
+          </div>
+          <div class="text-[11px] font-mono text-slate-500 -mt-1">Software Roles & Credibility Engine</div>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <div class="hidden lg:flex items-center gap-1 bg-surface-850 p-1 rounded-xl border border-surface-700">
+        <button onclick="switchTab('jobs')" id="tab-btn-jobs" class="tab-button active px-4 py-2 rounded-lg text-xs font-semibold transition-all">
+          <i class="fa-solid fa-briefcase mr-1.5"></i> Role Explorer
+        </button>
+        <button onclick="switchTab('credibility')" id="tab-btn-credibility" class="tab-button px-4 py-2 rounded-lg text-xs font-semibold transition-all">
+          <i class="fa-solid fa-shield-check mr-1.5 text-emerald-500"></i> Credibility Auditor
+        </button>
+        <button onclick="switchTab('matrix')" id="tab-btn-matrix" class="tab-button px-4 py-2 rounded-lg text-xs font-semibold transition-all">
+          <i class="fa-solid fa-stairs mr-1.5 text-sky-500"></i> Attachment → CTO Guide
+        </button>
+        <button onclick="switchTab('reviews')" id="tab-btn-reviews" class="tab-button px-4 py-2 rounded-lg text-xs font-semibold transition-all">
+          <i class="fa-solid fa-comments mr-1.5 text-amber-500"></i> Dev Reviews
+        </button>
+        <button onclick="switchTab('analytics')" id="tab-btn-analytics" class="tab-button px-4 py-2 rounded-lg text-xs font-semibold transition-all">
+          <i class="fa-solid fa-chart-line mr-1.5 text-purple-500"></i> Market Salaries (KES/USD)
+        </button>
+      </div>
+
+      <!-- Quick Actions + Theme Switcher -->
+      <div class="flex items-center gap-2">
+
+        <button onclick="switchTab('credibility')" class="hidden sm:inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg bg-surface-800 hover:bg-surface-700 text-slate-700 border border-slate-300 transition shadow-sm">
+          <i class="fa-solid fa-magnifying-glass-chart text-brand-500"></i> Check Company
+        </button>
+        <button onclick="openModal('modal-write-review')" class="inline-flex items-center gap-1.5 text-xs font-semibold px-3.5 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-white shadow-sm transition">
+          <i class="fa-solid fa-pen-to-square"></i> Review
+        </button>
+      </div>
+    </div>
+
+    <!-- Mobile Nav Bar -->
+    <div class="flex lg:hidden overflow-x-auto gap-2 pt-3 pb-1 text-xs border-t border-surface-800 mt-2 scrollbar-none">
+      <button onclick="switchTab('jobs')" class="whitespace-nowrap px-3 py-1.5 rounded-lg bg-surface-800 text-slate-700">Roles</button>
+      <button onclick="switchTab('credibility')" class="whitespace-nowrap px-3 py-1.5 rounded-lg bg-surface-800 text-slate-700">Credibility</button>
+      <button onclick="switchTab('matrix')" class="whitespace-nowrap px-3 py-1.5 rounded-lg bg-surface-800 text-slate-700">Career Levels</button>
+      <button onclick="switchTab('reviews')" class="whitespace-nowrap px-3 py-1.5 rounded-lg bg-surface-800 text-slate-700">Reviews</button>
+      <button onclick="switchTab('analytics')" class="whitespace-nowrap px-3 py-1.5 rounded-lg bg-surface-800 text-slate-700">Salaries</button>
+    </div>
+  </nav>
+
+  <!-- Hero Section -->
+  <div class="hero-section bg-gradient-to-b from-white via-slate-50 to-slate-100 border-b border-slate-200 pt-8 pb-10 px-4 transition-colors">
+    <div class="max-w-7xl mx-auto">
+      <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+        <div class="max-w-3xl">
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-surface-800 border border-slate-200 text-xs font-mono text-brand-500 mb-3 shadow-xs">
+            <span class="w-2 h-2 rounded-full bg-brand-500 animate-ping"></span>
+            Real-time Kenyan & Global Workpool Monitoring
+          </div>
+          <h1 class="hero-title text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-slate-900 leading-tight">
+            Find Software Engineering Roles. <br/>
+            <span class="hero-subtitle-gradient bg-clip-text text-transparent bg-gradient-to-r from-blue-600 via-sky-600 to-teal-600">
+              Countercheck Credibility. Level Up in Kenya.
+            </span>
+          </h1>
+          <p class="mt-3 text-slate-600 text-sm sm:text-base leading-relaxed">
+            Strategically curated for the Kenyan tech ecosystem. From university <strong class="text-slate-800 font-semibold">Industrial Attachments</strong> and <strong class="text-slate-800 font-semibold">Internships</strong>, to <strong class="text-slate-800 font-semibold">Junior</strong>, <strong class="text-slate-800 font-semibold">Senior</strong>, <strong class="text-slate-800 font-semibold">Lead Manager</strong> and <strong class="text-slate-800 font-semibold">CTO</strong> roles. Includes automated scam protection, BRS legitimacy audits, and developer culture reviews.
+          </p>
+        </div>
+
+        <!-- Quick Stats Cards (Adaptive Blended Surface) -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-2 gap-3 shrink-0">
+          <div class="hero-stat-card">
+            <div class="hero-stat-label">Seniority Spectrum</div>
+            <div class="hero-stat-value">Attachment → CTO</div>
+            <div class="hero-stat-sub hero-stat-sub-emerald">7 Strategic Tiers</div>
+          </div>
+          <div class="hero-stat-card">
+            <div class="hero-stat-label">Scam & Fee Shield</div>
+            <div class="hero-stat-value hero-stat-value-blue">100% Free Apply</div>
+            <div class="hero-stat-sub hero-stat-sub-muted">Kenyan Law Protected</div>
+          </div>
+          <div class="hero-stat-card">
+            <div class="hero-stat-label">Work Pool Scope</div>
+            <div class="hero-stat-value">Kenya + Global</div>
+            <div class="hero-stat-sub hero-stat-sub-sky">Remote Deel / Local PAYE</div>
+          </div>
+          <div class="hero-stat-card">
+            <div class="hero-stat-label">Salary Benchmarks</div>
+            <div class="hero-stat-value hero-stat-value-amber">KES & USD</div>
+            <div class="hero-stat-sub hero-stat-sub-muted">M-Pesa / Wire Tracked</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Content Wrapper -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 py-8">
+
+    <!-- ========================================== -->
+    <!-- TAB 1: ROLE EXPLORER & JOB BOARD           -->
+    <!-- ========================================== -->
+    <section id="section-jobs" class="tab-content">
+      <!-- Search and Filter Control Deck -->
+      <div class="bg-surface-850 border border-surface-700 rounded-2xl p-5 mb-8 shadow-xl">
+        <div class="grid grid-cols-1 md:grid-cols-12 gap-3.5">
+          <!-- Text Search -->
+          <div class="md:col-span-5 relative">
+            <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+              <i class="fa-solid fa-magnifying-glass"></i>
+            </div>
+            <input 
+              type="text" 
+              id="filter-search" 
+              placeholder="Search title, tech stack (Python, React, Go, M-Pesa), or company..." 
+              class="w-full pl-10 pr-4 py-2.5 bg-surface-900 border border-surface-700 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-brand-500 transition"
+              oninput="handleSearchDebounced()"
+            >
+          </div>
+
+          <!-- Seniority Filter (Attachment -> CTO) -->
+          <div class="md:col-span-3">
+            <select 
+              id="filter-seniority" 
+              class="w-full py-2.5 px-3 bg-surface-900 border border-surface-700 rounded-xl text-sm text-slate-200 focus:outline-none focus:border-brand-500 transition cursor-pointer"
+              onchange="loadJobs()"
+            >
+              <option value="all">🎓 All Seniority Levels (Attachment → CTO)</option>
+              <option value="attachment">Industrial Attachment (University/NITA)</option>
+              <option value="internship">Internship / Graduate Trainee</option>
+              <option value="junior">Junior Developer (0-2 Yrs)</option>
+              <option value="mid">Mid-Level Developer (2-5 Yrs)</option>
+              <option value="senior">Senior / Staff Engineer (5+ Yrs)</option>
+              <option value="lead_manager">Lead Manager / Engineering Manager</option>
+              <option value="cto">Chief Technology Officer (CTO / Head of Tech)</option>
+            </select>
+          </div>
+
+          <!-- CS Domain Filter -->
+          <div class="md:col-span-2">
+            <select 
+              id="filter-domain" 
+              class="w-full py-2.5 px-3 bg-surface-900 border border-surface-700 rounded-xl text-sm text-slate-200 focus:outline-none focus:border-brand-500 transition cursor-pointer"
+              onchange="loadJobs()"
+            >
+              <option value="all">💻 All CS Disciplines</option>
+              <option value="fullstack">Fullstack</option>
+              <option value="frontend">Frontend</option>
+              <option value="backend">Backend & Microservices</option>
+              <option value="mobile">Mobile (Flutter / Android / iOS)</option>
+              <option value="devops_cloud">Cloud & DevOps / SRE</option>
+              <option value="ai_ml_data">AI / Machine Learning / Data</option>
+              <option value="cybersecurity">Cybersecurity & CBK Compliance</option>
+              <option value="qa_testing">QA & Test Automation</option>
+            </select>
+          </div>
+
+          <!-- Location Type (Kenya vs Worldwide Remote) -->
+          <div class="md:col-span-2">
+            <select 
+              id="filter-location" 
+              class="w-full py-2.5 px-3 bg-surface-900 border border-surface-700 rounded-xl text-sm text-slate-200 focus:outline-none focus:border-brand-500 transition cursor-pointer"
+              onchange="loadJobs()"
+            >
+              <option value="all">🌍 All Locations</option>
+              <option value="Kenya Local">Kenya Local (Nairobi / etc.)</option>
+              <option value="Worldwide Remote">Worldwide Remote (Open to KE)</option>
+              <option value="Hybrid">Hybrid Nairobi</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Secondary Filter Row: Credibility Score & Quick Pills -->
+        <div class="mt-4 pt-3.5 border-t border-surface-750 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div class="flex items-center gap-3">
+            <span class="text-slate-400 font-mono">Min Credibility Score:</span>
+            <input 
+              type="range" 
+              id="filter-credibility" 
+              min="0" 
+              max="95" 
+              value="0" 
+              step="10" 
+              class="w-28 sm:w-36 accent-brand-500 cursor-pointer"
+              oninput="document.getElementById('credibility-val').innerText = this.value + '+'; loadJobs();"
+            >
+            <span id="credibility-val" class="font-mono text-brand-500 font-bold">0+</span>
+            <span class="text-slate-500 text-[11px] hidden sm:inline">(Filters out sketchy offers)</span>
+          </div>
+
+          <!-- Quick Filters -->
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <span class="text-slate-800 font-bold mr-1">Quick Select:</span>
+            <button onclick="quickFilterSeniority('attachment')" class="px-2.5 py-1 rounded-md bg-[#BEBEBE] hover:bg-[#B0B0B0] text-blue-900 font-bold border border-[#9E9E9E] shadow-2xs">Attachment</button>
+            <button onclick="quickFilterSeniority('junior')" class="px-2.5 py-1 rounded-md bg-[#BEBEBE] hover:bg-[#B0B0B0] text-emerald-900 font-bold border border-[#9E9E9E] shadow-2xs">Junior Dev</button>
+            <button onclick="quickFilterSeniority('senior')" class="px-2.5 py-1 rounded-md bg-[#BEBEBE] hover:bg-[#B0B0B0] text-purple-900 font-bold border border-[#9E9E9E] shadow-2xs">Senior SWE</button>
+            <button onclick="quickFilterSeniority('cto')" class="px-2.5 py-1 rounded-md bg-[#BEBEBE] hover:bg-[#B0B0B0] text-amber-900 font-bold border border-[#9E9E9E] shadow-2xs">CTO</button>
+            <button onclick="quickFilterLocation('Worldwide Remote')" class="px-2.5 py-1 rounded-md bg-[#BEBEBE] hover:bg-[#B0B0B0] text-teal-900 font-bold border border-[#9E9E9E] shadow-2xs">USD Remote</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live Results Header -->
+      <div class="flex justify-between items-center mb-5">
+        <div>
+          <h2 class="text-lg font-bold text-white flex items-center gap-2">
+            Available Verified Positions <span id="jobs-count-badge" class="px-2 py-0.5 rounded-full text-xs bg-brand-500/20 text-brand-400 font-mono border border-brand-500/30">Loading...</span>
+          </h2>
+          <p class="text-xs text-slate-400 mt-0.5">Every role has undergone credibility scanning, salary assessment, and Kenyan accessibility checks.</p>
+        </div>
+        <button onclick="openModal('modal-post-job')" class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-surface-800 hover:bg-surface-700 text-brand-400 border border-brand-500/30 transition">
+          <i class="fa-solid fa-plus mr-1"></i> Post a Job Offer
+        </button>
+      </div>
+
+      <!-- Job Cards Grid -->
+      <div id="jobs-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- Rendered dynamically by app.js -->
+      </div>
+    </section>
+
+    <!-- ========================================== -->
+    <!-- TAB 2: CREDIBILITY AUDITOR & SCAM SCANNER  -->
+    <!-- ========================================== -->
+    <section id="section-credibility" class="tab-content hidden">
+      <div class="max-w-4xl mx-auto">
+        <div class="bg-surface-850 border border-surface-700 rounded-2xl p-6 sm:p-8 shadow-xl">
+          <div class="flex items-start gap-4">
+            <div class="w-12 h-12 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0 text-2xl">
+              <i class="fa-solid fa-shield-halved"></i>
+            </div>
+            <div>
+              <h2 class="text-xl sm:text-2xl font-bold text-white">Company & Job Credibility Auditor</h2>
+              <p class="text-sm text-slate-400 mt-1">
+                Found a job opportunity on WhatsApp, Telegram, LinkedIn, or a job board? Countercheck its legitimacy here before sending CVs or responding to interview invitations.
+              </p>
+            </div>
+          </div>
+
+          <!-- Auditor Input Form -->
+          <form id="audit-form" class="mt-6 space-y-4" onsubmit="handleRunAudit(event)">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs font-medium text-slate-300 mb-1">Company / Organisation Name *</label>
+                <input 
+                  type="text" 
+                  id="audit-company" 
+                  placeholder="e.g. Safaricom PLC, Apex Global Tech" 
+                  required 
+                  class="w-full px-3.5 py-2.5 bg-surface-900 border border-surface-700 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-brand-500"
+                >
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-300 mb-1">Official Website / Domain</label>
+                <input 
+                  type="text" 
+                  id="audit-domain" 
+                  placeholder="e.g. safaricom.co.ke, apex-careers.xyz" 
+                  class="w-full px-3.5 py-2.5 bg-surface-900 border border-surface-700 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-brand-500"
+                >
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs font-medium text-slate-300 mb-1">Recruiter Contact Email</label>
+                <input 
+                  type="email" 
+                  id="audit-email" 
+                  placeholder="e.g. hr@safaricom.co.ke or recruiter@gmail.com" 
+                  class="w-full px-3.5 py-2.5 bg-surface-900 border border-surface-700 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-brand-500"
+                >
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-300 mb-1">Fee Requirement Check *</label>
+                <div class="flex items-center gap-3 pt-2">
+                  <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                    <input type="checkbox" id="audit-fee" class="w-4 h-4 rounded text-brand-500 focus:ring-brand-500 bg-surface-900 border-surface-700">
+                    <span>Asks for interview / badge / laptop fee via M-Pesa?</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-xs font-medium text-slate-300 mb-1">Job Description / Email Message Excerpt</label>
+              <textarea 
+                id="audit-text" 
+                rows="4" 
+                placeholder="Paste the job description or email message text here to scan for red flags, unrealistic salaries, or phishing lures..." 
+                class="w-full px-3.5 py-2.5 bg-surface-900 border border-surface-700 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-brand-500"
+              ></textarea>
+            </div>
+
+            <div class="flex justify-end gap-3 pt-2">
+              <button 
+                type="button" 
+                onclick="loadSampleScamAudit()" 
+                class="text-xs px-3.5 py-2 rounded-xl bg-surface-800 hover:bg-surface-700 text-rose-300 border border-rose-500/30 transition"
+              >
+                <i class="fa-solid fa-triangle-exclamation mr-1"></i> Load Scam Sample
+              </button>
+              <button 
+                type="button" 
+                onclick="loadSampleSafeAudit()" 
+                class="text-xs px-3.5 py-2 rounded-xl bg-surface-800 hover:bg-surface-700 text-emerald-300 border border-emerald-500/30 transition"
+              >
+                <i class="fa-solid fa-building-circle-check mr-1"></i> Load Legit Sample
+              </button>
+              <button 
+                type="submit" 
+                class="text-xs font-bold px-6 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white shadow-lg shadow-brand-500/20 transition flex items-center gap-2"
+              >
+                <i class="fa-solid fa-magnifying-glass-chart"></i> Run Deep Credibility Audit
+              </button>
+            </div>
+          </form>
+
+          <!-- Audit Result Output Card -->
+          <div id="audit-result-box" class="mt-8 hidden border rounded-2xl p-6 transition-all">
+            <!-- Rendered by app.js -->
+          </div>
+
+          <!-- Common Kenyan Job Scams Awareness -->
+          <div class="mt-10 pt-6 border-t border-surface-750">
+            <h3 class="text-sm font-bold text-slate-200 flex items-center gap-2">
+              <i class="fa-solid fa-triangle-exclamation text-amber-400"></i> Crucial Red Flags in the Kenyan Tech Job Market:
+            </h3>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3 text-xs text-slate-400">
+              <div class="p-3 bg-surface-900 rounded-xl border border-surface-800">
+                <span class="font-semibold text-rose-400 block mb-0.5">1. Upfront "Interview / Medical" M-Pesa Fees:</span>
+                Under Kenyan Employment Act 2007, an employer or agency cannot charge any fee to a job seeker. Any M-Pesa request is 100% a fraud.
+              </div>
+              <div class="p-3 bg-surface-900 rounded-xl border border-surface-800">
+                <span class="font-semibold text-rose-400 block mb-0.5">2. "Free Laptop Shipping" Scam:</span>
+                Fraudsters claim you got a remote developer job but ask you to pay KES 2,500 - KES 6,000 courier delivery fee for a company MacBook.
+              </div>
+              <div class="p-3 bg-surface-900 rounded-xl border border-surface-800">
+                <span class="font-semibold text-rose-400 block mb-0.5">3. Free Email Domains for MNCs:</span>
+                Recruiters claiming to represent Safaricom, Microsoft, or Equity writing from `@gmail.com` or `@yahoo.com` instead of official corporate domains.
+              </div>
+              <div class="p-3 bg-surface-900 rounded-xl border border-surface-800">
+                <span class="font-semibold text-rose-400 block mb-0.5">4. Unpaid Exploitative Attachments:</span>
+                Industrial attachments in Kenya should provide academic supervision, NITA logbook signing, and where possible, basic transport stipends.
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================== -->
+    <!-- TAB 3: ATTACHMENT TO CTO CAREER MATRIX     -->
+    <!-- ========================================== -->
+    <section id="section-matrix" class="tab-content hidden">
+      <div class="max-w-6xl mx-auto">
+        <div class="mb-6">
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-sky-500/10 border border-sky-500/20 text-xs font-mono text-sky-400 mb-2">
+            Kenyan CS Roadmap Strategy
+          </div>
+          <h2 class="text-2xl font-bold text-white">Full Computer Science Seniority Spectrum</h2>
+          <p class="text-sm text-slate-400 mt-1">
+            Every career level accessible by Kenyans analyzed strategically: from student industrial attachments under NITA to executive CTO roles.
+          </p>
+        </div>
+
+        <!-- Career Ladder Grid -->
+        <div id="roles-matrix-container" class="space-y-4">
+          <!-- Rendered dynamically from /api/roles-guide -->
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================== -->
+    <!-- TAB 4: DEVELOPER REVIEWS & CULTURE HUB     -->
+    <!-- ========================================== -->
+    <section id="section-reviews" class="tab-content hidden">
+      <div class="max-w-5xl mx-auto">
+        <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-6">
+          <div>
+            <h2 class="text-2xl font-bold text-white flex items-center gap-2">
+              Kenyan Developer Company Reviews
+              <span class="text-xs px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">Verified & Anonymous</span>
+            </h2>
+            <p class="text-sm text-slate-400 mt-1">
+              Unfiltered feedback on work culture, timely salary payment (M-Pesa / Bank), overtime, and real interview stages.
+            </p>
+          </div>
+          <button onclick="openModal('modal-write-review')" class="text-xs font-bold px-4 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white shadow-md shadow-brand-500/20 transition self-start sm:self-auto flex items-center gap-2">
+            <i class="fa-solid fa-pen-nib"></i> Write Company Review
+          </button>
+        </div>
+
+        <!-- Filter reviews by company -->
+        <div class="bg-surface-850 p-4 rounded-xl border border-surface-700 mb-6 flex items-center gap-3">
+          <i class="fa-solid fa-filter text-slate-500 text-sm"></i>
+          <input 
+            type="text" 
+            id="filter-review-company" 
+            placeholder="Filter reviews by company name (e.g. Safaricom, Microsoft, Twiga, GitLab)..." 
+            class="bg-transparent text-sm text-slate-200 placeholder-slate-500 focus:outline-none w-full"
+            oninput="loadReviews()"
+          >
+        </div>
+
+        <!-- Reviews Grid -->
+        <div id="reviews-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <!-- Rendered dynamically by app.js -->
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================== -->
+    <!-- TAB 5: MARKET SALARIES & ANALYTICS DASHBOARD-->
+    <!-- ========================================== -->
+    <section id="section-analytics" class="tab-content hidden">
+      <div class="max-w-6xl mx-auto space-y-8">
+        <div>
+          <h2 class="text-2xl font-bold text-white">Kenyan Tech Market Salary Benchmarks & Analytics</h2>
+          <p class="text-sm text-slate-400 mt-1">
+            Empirical compensation data across all 7 seniority levels in the Kenyan market (KES) and worldwide remote equivalents (USD).
+          </p>
+        </div>
+
+        <!-- Salary Progression Table -->
+        <div class="bg-surface-850 border border-surface-700 rounded-2xl overflow-hidden shadow-xl">
+          <div class="p-5 border-b border-surface-750 flex justify-between items-center">
+            <h3 class="font-bold text-white text-base flex items-center gap-2">
+              <i class="fa-solid fa-money-bill-wave text-emerald-400"></i> Benchmark Salary Range by Seniority Level (2026 Kenyan Market)
+            </h3>
+            <span class="text-xs font-mono text-slate-400">Currency: KES & USD</span>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs sm:text-sm">
+              <thead class="bg-surface-900/80 text-slate-400 uppercase font-mono text-[11px] border-b border-surface-750">
+                <tr>
+                  <th class="py-3 px-4">Level / Stage</th>
+                  <th class="py-3 px-4">Local Kenyan Pay (KES / Month)</th>
+                  <th class="py-3 px-4">Worldwide Remote (USD / Month)</th>
+                  <th class="py-3 px-4">Typical Duration</th>
+                  <th class="py-3 px-4">NITA / Legal Status</th>
+                  <th class="py-3 px-4">Core Strategic Focus</th>
+                </tr>
+              </thead>
+              <tbody id="salary-table-body" class="divide-y divide-surface-750 text-slate-200">
+                <!-- Rendered dynamically by app.js -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- In-Demand Tech Stacks in Kenya -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div class="bg-surface-850 border border-surface-700 rounded-2xl p-6 shadow-xl">
+            <h3 class="font-bold text-white text-base mb-4 flex items-center gap-2">
+              <i class="fa-solid fa-chart-column text-sky-400"></i> Top In-Demand Tech Stacks in Kenya
+            </h3>
+            <div id="skills-demand-bars" class="space-y-4">
+              <!-- Rendered dynamically by app.js -->
+            </div>
+          </div>
+
+          <div class="bg-surface-850 border border-surface-700 rounded-2xl p-6 shadow-xl flex flex-col justify-between">
+            <div>
+              <h3 class="font-bold text-white text-base mb-3 flex items-center gap-2">
+                <i class="fa-solid fa-globe text-brand-500"></i> Local vs Worldwide Remote Hiring Mechanics for Kenyans
+              </h3>
+              <p class="text-xs text-slate-400 leading-relaxed mb-4">
+                Kenyan software engineers have two primary pathways in today's global work pool:
+              </p>
+              <div class="space-y-3 text-xs">
+                <div class="p-3 bg-surface-900 rounded-xl border border-surface-750">
+                  <span class="font-bold text-brand-400 block mb-1">1. Kenyan Local Entity (PAYE / Statutory):</span>
+                  Full-time Kenyan contract with Safaricom, Equity, KCB, Microsoft ADC, or local scaleups. Benefits include NHIF/SHIF, NSSF, Housing Levy deduction, and Kenyan Sacco linkages.
+                </div>
+                <div class="p-3 bg-surface-900 rounded-xl border border-surface-750">
+                  <span class="font-bold text-teal-400 block mb-1">2. Worldwide Remote via EOR / W-8BEN:</span>
+                  Hired by US/EU firms (GitLab, Canonical, Automattic, Turing, Deel). Remuneration received via wire transfer or Deel/Payoneer/M-Pesa in USD. Tax filed via KRA iTax turnover/income tax self-assessment.
+                </div>
+              </div>
+            </div>
+
+            <div class="mt-4 p-3.5 bg-brand-950/40 border border-brand-500/30 rounded-xl text-xs text-brand-300">
+              <i class="fa-solid fa-lightbulb mr-1 text-amber-400"></i> <strong class="text-white">Pro Tip:</strong> Kenyan engineers who master Go, Python, or TypeScript alongside cloud automation command on average 2.4x higher compensation in remote international pools.
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ========================================== -->
+  <!-- MODAL: JOB DETAIL & COUNTERCHECK VIEW     -->
+  <!-- ========================================== -->
+  <div id="modal-job-detail" class="fixed inset-0 z-50 hidden bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-surface-850 border border-surface-700 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 shadow-2xl relative">
+      <button onclick="closeModal('modal-job-detail')" class="absolute top-4 right-4 text-slate-400 hover:text-white text-lg">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+
+      <div id="job-detail-content">
+        <!-- Rendered dynamically by app.js -->
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- MODAL: WRITE COMPANY REVIEW               -->
+  <!-- ========================================== -->
+  <div id="modal-write-review" class="fixed inset-0 z-50 hidden bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-surface-850 border border-surface-700 rounded-2xl max-w-xl w-full max-h-[90vh] overflow-y-auto p-6 shadow-2xl relative">
+      <button onclick="closeModal('modal-write-review')" class="absolute top-4 right-4 text-slate-400 hover:text-white text-lg">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+
+      <div class="flex items-center gap-3 mb-4">
+        <div class="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center">
+          <i class="fa-solid fa-comment-dots text-lg"></i>
+        </div>
+        <div>
+          <h3 class="text-lg font-bold text-white">Submit Anonymous Developer Review</h3>
+          <p class="text-xs text-slate-400">Help fellow Kenyan engineers make informed career decisions.</p>
+        </div>
+      </div>
+
+      <form id="review-form" onsubmit="handleReviewSubmit(event)" class="space-y-3.5 text-xs">
+        <div>
+          <label class="block font-medium text-slate-300 mb-1">Company / Organisation Name *</label>
+          <input type="text" id="rev-company" required placeholder="e.g. Safaricom PLC, Twiga, Pesapal" class="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-slate-100">
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-medium text-slate-300 mb-1">Your Role *</label>
+            <input type="text" id="rev-role" required placeholder="e.g. Frontend Engineer, Attachment Trainee" class="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-slate-100">
+          </div>
+          <div>
+            <label class="block font-medium text-slate-300 mb-1">Seniority Level *</label>
+            <select id="rev-seniority" class="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-slate-100">
+              <option value="attachment">Attachment</option>
+              <option value="internship">Internship</option>
+              <option value="junior">Junior Developer</option>
+              <option value="mid" selected>Mid-Level</option>
+              <option value="senior">Senior / Lead</option>
+              <option value="lead_manager">Engineering Manager</option>
+              <option value="cto">CTO / Executive</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 gap-3">
+          <div>
+            <label class="block font-medium text-slate-300 mb-1">Overall Rating (1-5)</label>
+            <select id="rev-rating" class="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-slate-100">
+              <option value="5">⭐⭐⭐⭐⭐ (5 - Superb)</option>
+              <option value="4" selected>⭐⭐⭐⭐ (4 - Good)</option>
+              <option value="3">⭐⭐⭐ (3 - Average)</option>
+              <option value="2">⭐⭐ (2 - Below Avg)</option>
+              <option value="1">⭐ (1 - Terrible)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-medium text-slate-300 mb-1">Culture Rating</label>
+            <select id="rev-culture" class="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-slate-100">
+              <option value="5">5/5</option>
+              <option value="4" selected>4/5</option>
+              <option value="3">3/5</option>
+              <option value="2">2/5</option>
+              <option value="1">1/5</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-medium text-slate-300 mb-1">Timely Salary / M-Pesa</label>
+            <select id="rev-timely-pay" class="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-slate-100">
+              <option value="Always on time">Always on time</option>
+              <option value="Sometimes delayed">Sometimes delayed</option>
+              <option value="Chronic delays">Chronic delays</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-medium text-slate-300 mb-1">The Pros (What do you like?) *</label>
+          <textarea id="rev-pros" rows="2" required placeholder="e.g. Great mentorship, prompt salary, good tech stack, medical cover..." class="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-slate-100"></textarea>
+        </div>
+
+        <div>
+          <label class="block font-medium text-slate-300 mb-1">The Cons (What should improve?) *</label>
+          <textarea id="rev-cons" rows="2" required placeholder="e.g. Occasional late night deployments, slow approvals..." class="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-slate-100"></textarea>
+        </div>
+
+        <div>
+          <label class="block font-medium text-slate-300 mb-1">Interview Process Insight</label>
+          <input type="text" id="rev-interview" placeholder="e.g. Take-home project in React, 45-min DSA screen, cultural fit with Head of Engineering" class="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-slate-100">
+        </div>
+
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" onclick="closeModal('modal-write-review')" class="px-3.5 py-2 rounded-lg bg-surface-800 text-slate-300">Cancel</button>
+          <button type="submit" class="px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-white font-bold">Submit Review</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- MODAL: POST A JOB OFFER                   -->
+  <!-- ========================================== -->
+  <div id="modal-post-job" class="fixed inset-0 z-50 hidden bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-surface-850 border border-surface-700 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 shadow-2xl relative">
+      <button onclick="closeModal('modal-post-job')" class="absolute top-4 right-4 text-slate-400 hover:text-white text-lg">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+
+      <div class="flex items-center gap-3 mb-4">
+        <div class="w-10 h-10 rounded-xl bg-brand-500/20 text-brand-400 flex items-center justify-center">
+          <i class="fa-solid fa-plus text-lg"></i>
+        </div>
+        <div>
+          <h3 class="text-lg font-bold text-white">Post a Software Role (Subject to Credibility Audit)</h3>
+          <p class="text-xs text-slate-400">All submissions are algorithmically audited against scam markers.</p>
+        </div>
+      </div>
+
+      <form id="post-job-form" onsubmit="handlePostJob(event)" class="space-y-3.5 text-xs">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-medium text-slate-300 mb-1">Role Title *</label>
+            <input type="text" id="post-title" required placeholder="e.g. Senior Backend Engineer" class="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-slate-100">
+          </div>
+          <div>
+            <label class="block font-medium text-slate-300 mb-1">Company Name *</label>
+            <input type="text" id="post-company" required placeholder="e.g. Safaricom, FinTech Hub" class="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-slate-100">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 gap-3">
+          <div>
+            <label class="block font-medium text-slate-300 mb-1">Seniority *</label>
+            <select id="post-seniority" class="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-slate-100">
+              <option value="attachment">Attachment</option>
+              <option value="internship">Internship</option>
+              <option value="junior">Junior Dev</option>
+              <option value="mid">Mid-Level</option>
+              <option value="senior">Senior Dev</option>
+              <option value="lead_manager">Lead Manager</option>
+              <option value="cto">CTO</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-medium text-slate-300 mb-1">Domain *</label>
+            <select id="post-domain" class="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-slate-100">
+              <option value="fullstack">Fullstack</option>
+              <option value="frontend">Frontend</option>
+              <option value="backend">Backend</option>
+              <option value="mobile">Mobile</option>
+              <option value="devops_cloud">Cloud / DevOps</option>
+              <option value="ai_ml_data">AI & Data</option>
+              <option value="cybersecurity">Cybersecurity</option>
+              <option value="qa_testing">QA / SDET</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-medium text-slate-300 mb-1">Location Type *</label>
+            <select id="post-location-type" class="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-slate-100">
+              <option value="Kenya Local">Kenya Local</option>
+              <option value="Worldwide Remote">Worldwide Remote</option>
+              <option value="Hybrid">Hybrid Nairobi</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-medium text-slate-300 mb-1">Salary Range Min (KES)</label>
+            <input type="number" id="post-salary-min" placeholder="e.g. 150000" class="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-slate-100">
+          </div>
+          <div>
+            <label class="block font-medium text-slate-300 mb-1">Salary Range Max (KES)</label>
+            <input type="number" id="post-salary-max" placeholder="e.g. 250000" class="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-slate-100">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-medium text-slate-300 mb-1">Company Website / Domain</label>
+            <input type="text" id="post-domain-site" placeholder="e.g. company.co.ke" class="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-slate-100">
+          </div>
+          <div>
+            <label class="block font-medium text-slate-300 mb-1">Contact / Application Email</label>
+            <input type="email" id="post-email" placeholder="e.g. careers@company.co.ke" class="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-slate-100">
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-medium text-slate-300 mb-1">Job Description *</label>
+          <textarea id="post-desc" rows="3" required placeholder="Key responsibilities and day-to-day focus..." class="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-slate-100"></textarea>
+        </div>
+
+        <div>
+          <label class="block font-medium text-slate-300 mb-1">Requirements</label>
+          <textarea id="post-reqs" rows="2" placeholder="Tech stack, years of experience, education..." class="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-slate-100"></textarea>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" onclick="closeModal('modal-post-job')" class="px-3.5 py-2 rounded-lg bg-surface-800 text-slate-300">Cancel</button>
+          <button type="submit" class="px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-white font-bold">Publish Verified Job</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="mt-auto border-t border-surface-800 bg-surface-900/90 py-8 px-4 text-xs text-slate-400">
+    <div class="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
+      <div class="flex items-center gap-2">
+        <span class="w-2 h-2 rounded-full bg-brand-500"></span>
+        <strong class="text-white">DEV CORE KE</strong> — Empowering the Silicon Savannah & Global Remote Engineers.
+      </div>
+      <div class="flex items-center gap-6">
+        <span>Protected under Kenyan Employment Act</span>
+        <span>BRS Registration Validation</span>
+        <span>All Seniorities (Attachment → CTO)</span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="/app.js"></script>
+</body>
+</html>

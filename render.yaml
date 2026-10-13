@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: dev-core-ke
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: ""
+    startCommand: node server.js
+    envVars:
+      - key: NODE_VERSION
+        value: 24.20.0

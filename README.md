@@ -5,6 +5,12 @@
 ---
 
 <p align="center">
+  <a href="https://github.com/Hamidooh/dev-core-ke/fork">
+    <img src="https://img.shields.io/badge/🍴_FORK_REPO-00ffff?style=for-the-badge&logo=github&logoColor=black&labelColor=000000" width="300"/>
+  </a>
+</p>
+
+<p align="center">
   <a href="https://github.com/Hamidooh/dev-core-ke">
     <img src="https://img.shields.io/badge/⭐_STAR_REPO-8a2be2?style=for-the-badge&logo=github&logoColor=white&labelColor=000000" width="300"/>
   </a>

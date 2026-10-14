@@ -4,19 +4,217 @@
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
-const { DatabaseSync } = require('node:sqlite');
-
 const PORT = process.env.PORT || 3000;
 const DB_DIR = path.join(__dirname, 'data');
 const DB_FILE = path.join(DB_DIR, 'devcircle.sqlite');
+const DB_JSON_FILE = path.join(DB_DIR, 'devcircle_data.json');
 
 // Ensure database directory exists
 if (!fs.existsSync(DB_DIR)) {
   fs.mkdirSync(DB_DIR, { recursive: true });
 }
 
-// Initialize SQLite database
-const db = new DatabaseSync(DB_FILE);
+// Fallback in-memory/JSON DB engine for environments without native node:sqlite
+function createFallbackDb(jsonFilePath) {
+  let state = {
+    jobs: [],
+    reviews: [],
+    credibility_audits: [],
+    scanner_logs: []
+  };
+
+  if (fs.existsSync(jsonFilePath)) {
+    try {
+      state = JSON.parse(fs.readFileSync(jsonFilePath, 'utf8'));
+      if (!state.jobs) state.jobs = [];
+      if (!state.reviews) state.reviews = [];
+      if (!state.credibility_audits) state.credibility_audits = [];
+      if (!state.scanner_logs) state.scanner_logs = [];
+    } catch (e) {
+      console.error('Failed to parse json DB file:', e);
+    }
+  }
+
+  function saveState() {
+    try {
+      fs.writeFileSync(jsonFilePath, JSON.stringify(state, null, 2), 'utf8');
+    } catch (e) {
+      console.error('Failed to save state:', e);
+    }
+  }
+
+  return {
+    exec(sql) {
+      // Schema structure handled automatically
+    },
+    prepare(sql) {
+      const cleanSql = sql.replace(/\s+/g, ' ').trim();
+
+      if (cleanSql.includes('COUNT(*) as count FROM jobs')) {
+        return {
+          get() {
+            return { count: state.jobs.length };
+          }
+        };
+      }
+
+      if (cleanSql.startsWith('SELECT id FROM jobs WHERE')) {
+        return {
+          get(params) {
+            const title = (params.title || '').toLowerCase();
+            const company = (params.company || '').toLowerCase();
+            const applyUrl = (params.apply_url || '').toLowerCase();
+            return state.jobs.find(j => 
+              (j.title.toLowerCase() === title && j.company.toLowerCase() === company) ||
+              (applyUrl && j.apply_url && j.apply_url.toLowerCase() === applyUrl)
+            ) || null;
+          }
+        };
+      }
+
+      if (cleanSql === 'SELECT * FROM jobs WHERE id = ?') {
+        return {
+          get(id) {
+            return state.jobs.find(j => j.id === id) || null;
+          }
+        };
+      }
+
+      if (cleanSql.startsWith('SELECT * FROM jobs WHERE 1=1')) {
+        return {
+          all(params = {}) {
+            let list = [...state.jobs];
+            if (params.search) {
+              const q = params.search.replace(/%/g, '').toLowerCase();
+              list = list.filter(j => 
+                (j.title || '').toLowerCase().includes(q) ||
+                (j.company || '').toLowerCase().includes(q) ||
+                (j.tags || '').toLowerCase().includes(q) ||
+                (j.description || '').toLowerCase().includes(q)
+              );
+            }
+            if (params.seniority && params.seniority !== 'all') {
+              list = list.filter(j => j.seniority === params.seniority);
+            }
+            if (params.domain && params.domain !== 'all') {
+              list = list.filter(j => j.domain === params.domain);
+            }
+            if (params.location_type && params.location_type !== 'all') {
+              list = list.filter(j => j.location_type === params.location_type);
+            }
+            if (params.min_credibility > 0) {
+              list = list.filter(j => (j.credibility_score || 0) >= params.min_credibility);
+            }
+            return list.reverse();
+          }
+        };
+      }
+
+      if (cleanSql === 'SELECT * FROM jobs') {
+        return {
+          all() {
+            return [...state.jobs];
+          }
+        };
+      }
+
+      if (cleanSql.startsWith('INSERT INTO jobs')) {
+        return {
+          run(params) {
+            const newId = (state.jobs.length ? Math.max(...state.jobs.map(j => j.id || 0)) : 0) + 1;
+            const newJob = { id: newId, ...params };
+            state.jobs.push(newJob);
+            saveState();
+            return { lastInsertRowid: newId, changes: 1 };
+          }
+        };
+      }
+
+      if (cleanSql.startsWith('UPDATE jobs SET apply_url')) {
+        return {
+          run(applyUrl, id) {
+            const j = state.jobs.find(item => item.id === id);
+            if (j) {
+              j.apply_url = applyUrl;
+              saveState();
+            }
+            return { changes: 1 };
+          }
+        };
+      }
+
+      if (cleanSql.startsWith('SELECT * FROM reviews')) {
+        return {
+          all(companyParam) {
+            if (companyParam) {
+              const q = companyParam.replace(/%/g, '').toLowerCase();
+              return state.reviews.filter(r => (r.company_name || '').toLowerCase().includes(q)).reverse();
+            }
+            return [...state.reviews].reverse();
+          }
+        };
+      }
+
+      if (cleanSql.startsWith('INSERT INTO reviews')) {
+        return {
+          run(params) {
+            const newId = (state.reviews.length ? Math.max(...state.reviews.map(r => r.id || 0)) : 0) + 1;
+            state.reviews.push({ id: newId, ...params });
+            saveState();
+            return { lastInsertRowid: newId, changes: 1 };
+          }
+        };
+      }
+
+      if (cleanSql.startsWith('INSERT INTO credibility_audits')) {
+        return {
+          run(params) {
+            const newId = (state.credibility_audits.length ? Math.max(...state.credibility_audits.map(c => c.id || 0)) : 0) + 1;
+            state.credibility_audits.push({ id: newId, ...params });
+            saveState();
+            return { lastInsertRowid: newId, changes: 1 };
+          }
+        };
+      }
+
+      if (cleanSql.startsWith('INSERT INTO scanner_logs')) {
+        return {
+          run(params) {
+            const newId = (state.scanner_logs.length ? Math.max(...state.scanner_logs.map(s => s.id || 0)) : 0) + 1;
+            state.scanner_logs.push({ id: newId, ...params });
+            saveState();
+            return { lastInsertRowid: newId, changes: 1 };
+          }
+        };
+      }
+
+      if (cleanSql.startsWith('SELECT * FROM scanner_logs')) {
+        return {
+          all() {
+            return [...state.scanner_logs].reverse().slice(0, 15);
+          }
+        };
+      }
+
+      return {
+        all: () => [],
+        get: () => null,
+        run: () => ({ changes: 0 })
+      };
+    }
+  };
+}
+
+// Initialize SQLite database (with universal fallback)
+let db;
+try {
+  const { DatabaseSync } = require('node:sqlite');
+  db = new DatabaseSync(DB_FILE);
+  console.log('✅ SQLite Engine: Native node:sqlite loaded successfully.');
+} catch (err) {
+  console.warn(`⚠️ SQLite Engine: Native node:sqlite not available (${err.message}). Using resilient JSON-backed DB engine.`);
+  db = createFallbackDb(DB_JSON_FILE);
+}
 
 // Setup Database Schema
 function initDatabase() {
@@ -110,6 +308,43 @@ function seedDatabase() {
       @apply_url, @contact_email, @remote_accessible_kenya, @posted_date, @tags
     )
   `);
+
+  const insertReview = db.prepare(`
+    INSERT INTO reviews (
+      company_name, role, seniority, rating, culture_rating, salary_rating, management_rating,
+      timely_pay_mpesa_bank, pros, cons, interview_experience, verified_dev, created_at
+    ) VALUES (
+      @company_name, @role, @seniority, @rating, @culture_rating, @salary_rating, @management_rating,
+      @timely_pay_mpesa_bank, @pros, @cons, @interview_experience, @verified_dev, @created_at
+    )
+  `);
+
+  // If pre-scraped data file exists, seed all accumulated 119+ verified roles immediately
+  if (fs.existsSync(DB_JSON_FILE)) {
+    try {
+      const data = JSON.parse(fs.readFileSync(DB_JSON_FILE, 'utf8'));
+      let didSeed = false;
+      if (Array.isArray(data.jobs) && data.jobs.length > 0) {
+        for (const job of data.jobs) {
+          const { id, ...jobData } = job;
+          insertJob.run(jobData);
+        }
+        didSeed = true;
+      }
+      if (Array.isArray(data.reviews) && data.reviews.length > 0) {
+        for (const rev of data.reviews) {
+          const { id, ...revData } = rev;
+          insertReview.run(revData);
+        }
+      }
+      if (didSeed) {
+        console.log(`✅ Seeded ${data.jobs.length} roles and ${(data.reviews || []).length} reviews from ${DB_JSON_FILE}`);
+        return;
+      }
+    } catch (e) {
+      console.warn('Could not seed from json file, falling back to initialJobs:', e.message);
+    }
+  }
 
   const initialJobs = [
     // 1. ATTACHMENT (Industrial Attachment for Kenyan University Students - NITA accredited)
@@ -513,16 +748,6 @@ function seedDatabase() {
   }
 
   // Seed sample company reviews
-  const insertReview = db.prepare(`
-    INSERT INTO reviews (
-      company_name, role, seniority, rating, culture_rating, salary_rating, management_rating,
-      timely_pay_mpesa_bank, pros, cons, interview_experience, verified_dev, created_at
-    ) VALUES (
-      @company_name, @role, @seniority, @rating, @culture_rating, @salary_rating, @management_rating,
-      @timely_pay_mpesa_bank, @pros, @cons, @interview_experience, @verified_dev, @created_at
-    )
-  `);
-
   const initialReviews = [
     {
       company_name: "Safaricom PLC",
@@ -2058,10 +2283,10 @@ const server = http.createServer(async (req, res) => {
 // Initialize database and start listening
 initDatabase();
 
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`=======================================================`);
   console.log(`🚀 DEV CORE KE PLATFORM RUNNING`);
-  console.log(`📡 Local Server URL: http://localhost:${PORT}`);
+  console.log(`📡 Local Server URL: http://0.0.0.0:${PORT}`);
   console.log(`🇰🇪 Strategic focus: Kenyan & Global Software Roles`);
   console.log(`🛡️  Credibility Engine, Review Hub & Analytics Active`);
   console.log(`🤖 Autonomous Hourly Role Scanner: READY`);

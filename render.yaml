@@ -5,7 +5,7 @@ services:
     plan: free
     region: oregon
     buildCommand: ""
-    startCommand: node server.js
+    startCommand: node --experimental-sqlite server.js || node server.js
     envVars:
       - key: NODE_VERSION
-        value: 24.20.0
+        value: 22.14.0

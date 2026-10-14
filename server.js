@@ -2763,7 +2763,107 @@ function pingKeepAlive() {
     });
 }
 
-// Helper: Serve Static Files
+// --- SECURITY & DEFENSE ENGINE ---
+const CSP_POLICY = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdnjs.cloudflare.com",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com",
+  "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com data:",
+  "img-src 'self' data: https: blob:",
+  "connect-src 'self' https: http:",
+  "frame-ancestors 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "upgrade-insecure-requests"
+].join('; ');
+
+function applySecurityHeaders(res) {
+  res.setHeader('Content-Security-Policy', CSP_POLICY);
+  res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+  res.setHeader('X-Permitted-Cross-Domain-Policies', 'none');
+  res.setHeader('Server', 'DEV-CORE-SECURITY-SHIELD');
+  res.removeHeader('X-Powered-By');
+}
+
+// In-Memory IP Rate Limiter & Brute-Force Shield
+const rateLimitMap = new Map();
+const adminLockoutMap = new Map();
+
+const GENERAL_RATE_LIMIT = 240; // 240 requests/min per IP
+const GENERAL_RATE_WINDOW_MS = 60 * 1000;
+const ADMIN_MAX_FAILED_ATTEMPTS = 5;
+const ADMIN_LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 mins lockout
+
+function getClientIp(req) {
+  const forwarded = req.headers['x-forwarded-for'];
+  if (forwarded) {
+    return forwarded.split(',')[0].trim();
+  }
+  return req.socket.remoteAddress || '127.0.0.1';
+}
+
+function checkRateLimit(ip) {
+  const now = Date.now();
+  let record = rateLimitMap.get(ip);
+  if (!record || now > record.resetTime) {
+    record = { count: 1, resetTime: now + GENERAL_RATE_WINDOW_MS };
+    rateLimitMap.set(ip, record);
+    return { allowed: true, remaining: GENERAL_RATE_LIMIT - 1, resetTime: record.resetTime };
+  }
+
+  record.count += 1;
+  const remaining = Math.max(0, GENERAL_RATE_LIMIT - record.count);
+  return {
+    allowed: record.count <= GENERAL_RATE_LIMIT,
+    remaining,
+    resetTime: record.resetTime
+  };
+}
+
+function checkAdminLockout(ip) {
+  const now = Date.now();
+  const lockout = adminLockoutMap.get(ip);
+  if (lockout && lockout.lockoutUntil && now < lockout.lockoutUntil) {
+    const minutesLeft = Math.ceil((lockout.lockoutUntil - now) / 60000);
+    return { locked: true, minutesLeft };
+  }
+  return { locked: false, minutesLeft: 0 };
+}
+
+function recordAdminFailure(ip) {
+  const now = Date.now();
+  let lockout = adminLockoutMap.get(ip) || { failedAttempts: 0, lockoutUntil: 0 };
+  lockout.failedAttempts += 1;
+  if (lockout.failedAttempts >= ADMIN_MAX_FAILED_ATTEMPTS) {
+    lockout.lockoutUntil = now + ADMIN_LOCKOUT_DURATION_MS;
+    console.warn(`[Security Alert] 🚨 IP ${ip} exceeded ${ADMIN_MAX_FAILED_ATTEMPTS} failed Developer PIN attempts. Locked out for 15 minutes.`);
+  }
+  adminLockoutMap.set(ip, lockout);
+  return lockout;
+}
+
+function recordAdminSuccess(ip) {
+  adminLockoutMap.delete(ip);
+}
+
+// Periodic cleanup of expired rate limit and lockout records
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, record] of rateLimitMap.entries()) {
+    if (now > record.resetTime) rateLimitMap.delete(ip);
+  }
+  for (const [ip, lockout] of adminLockoutMap.entries()) {
+    if (lockout.lockoutUntil && now > lockout.lockoutUntil) adminLockoutMap.delete(ip);
+  }
+}, 5 * 60 * 1000);
+
+// Helper: Serve Static Files with Directory Traversal Protection
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
@@ -2775,8 +2875,28 @@ const MIME_TYPES = {
   '.ico': 'image/x-icon'
 };
 
+const PUBLIC_DIR = path.resolve(__dirname, 'public');
+
 function serveStatic(req, res, pathname) {
-  let filePath = path.join(__dirname, 'public', pathname === '/' ? 'index.html' : pathname);
+  let safePath;
+  try {
+    safePath = decodeURIComponent(pathname === '/' ? 'index.html' : pathname);
+  } catch (e) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Bad Request: Malformed URI' }));
+    return;
+  }
+
+  // Strip null bytes and leading slashes before resolving
+  const cleanPath = safePath.replace(/\0/g, '').replace(/^[/\\]+/, '');
+  const filePath = path.resolve(PUBLIC_DIR, cleanPath);
+
+  // Strictly enforce path stays within PUBLIC_DIR
+  if (!filePath.startsWith(PUBLIC_DIR + path.sep) && filePath !== PUBLIC_DIR) {
+    res.writeHead(403, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Forbidden: Access Denied' }));
+    return;
+  }
 
   fs.stat(filePath, (err, stats) => {
     if (err || !stats.isFile()) {
@@ -2794,13 +2914,13 @@ function serveStatic(req, res, pathname) {
   });
 }
 
-// Request Body Parser Helper
+// Request Body Parser Helper (Hardened 500KB Limit)
 function parseJsonBody(req) {
   return new Promise((resolve, reject) => {
     let body = '';
     req.on('data', chunk => {
       body += chunk.toString();
-      if (body.length > 2e6) { // 2MB limit
+      if (body.length > 500 * 1024) { // 500KB limit
         reject(new Error('Payload too large'));
       }
     });
@@ -2820,16 +2940,37 @@ const server = http.createServer(async (req, res) => {
   const reqUrl = new URL(req.url, `http://${req.headers.host}`);
   const pathname = reqUrl.pathname;
   const method = req.method;
+  const clientIp = getClientIp(req);
 
-  // CORS headers for local testing
+  // Apply OWASP Security Headers to every response
+  applySecurityHeaders(res);
+
+  // Strict CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Admin-PIN');
 
   if (method === 'OPTIONS') {
     res.writeHead(204);
     res.end();
     return;
+  }
+
+  // Rate Limiting (exempt internal / health check ping)
+  if (pathname !== '/api/ping' && pathname !== '/api/health') {
+    const rate = checkRateLimit(clientIp);
+    res.setHeader('X-RateLimit-Limit', GENERAL_RATE_LIMIT);
+    res.setHeader('X-RateLimit-Remaining', rate.remaining);
+    res.setHeader('X-RateLimit-Reset', Math.ceil(rate.resetTime / 1000));
+
+    if (!rate.allowed) {
+      res.writeHead(429, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        status: 'rate_limited',
+        message: 'Too many requests. Please slow down and try again shortly.'
+      }));
+      return;
+    }
   }
 
   // --- API ROUTES ---
@@ -3189,15 +3330,35 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // 10. GET /api/admin/analytics (Developer-only visitor traffic console)
+  // 10. GET /api/admin/analytics (Developer-only visitor traffic console with Brute-Force Shield)
   if (method === 'GET' && pathname === '/api/admin/analytics') {
     try {
-      const pin = reqUrl.searchParams.get('pin') || req.headers['x-admin-pin'] || '';
-      if (!pin || pin !== ADMIN_PIN) {
-        res.writeHead(401, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ status: 'unauthorized', message: 'Access denied: Invalid Developer PIN' }));
+      const lockoutStatus = checkAdminLockout(clientIp);
+      if (lockoutStatus.locked) {
+        res.writeHead(429, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          status: 'locked_out',
+          message: `Too many failed authentication attempts. Access locked for ${lockoutStatus.minutesLeft} minute(s).`
+        }));
         return;
       }
+
+      const pin = reqUrl.searchParams.get('pin') || req.headers['x-admin-pin'] || '';
+      if (!pin || pin !== ADMIN_PIN) {
+        const lockout = recordAdminFailure(clientIp);
+        const attemptsRemaining = Math.max(0, ADMIN_MAX_FAILED_ATTEMPTS - lockout.failedAttempts);
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          status: 'unauthorized',
+          message: attemptsRemaining > 0
+            ? `Access denied: Invalid Developer PIN (${attemptsRemaining} attempt${attemptsRemaining === 1 ? '' : 's'} remaining before 15m lockout)`
+            : 'Access denied: Maximum failed attempts exceeded. Locked out for 15 minutes.'
+        }));
+        return;
+      }
+
+      // Successful authentication: clear failure count
+      recordAdminSuccess(clientIp);
 
       const analytics = getDeveloperSiteAnalytics();
       res.writeHead(200, { 'Content-Type': 'application/json' });

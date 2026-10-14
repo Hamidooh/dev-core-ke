@@ -4,6 +4,19 @@
 
 ---
 
+
+<p align="center">
+  <a href="https://github.com/Hamidooh/dev-core-ke/fork">
+    <img src="https://img.shields.io/badge/🍴_FORK_REPO-00ffff?style=for-the-badge&logo=github&logoColor=black&labelColor=000000" width="300"/>
+  </a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/Hamidooh/dev-core-ke">
+    <img src="https://img.shields.io/badge/⭐_STAR_REPO-8a2be2?style=for-the-badge&logo=github&logoColor=white&labelColor=000000" width="300"/>
+  </a>
+</p>
+
 ## 🌟 Strategic Focus & Core Highlights
 
 1. **Strategic Kenyan & Global Work Pool Coverage**:
@@ -62,6 +75,8 @@ http://localhost:3000
 - **Database**: Built-in SQLite database (`data/devcircle.sqlite` via `node:sqlite`)
 - **Frontend**: Responsive Single-Page Application (`public/index.html`, `public/app.js`, `public/style.css`, Tailwind CSS, FontAwesome)
 - **Background Daemon**: Autonomous hourly cron scanner + 10-min keep-alive loop
+
+
 
 ### REST API Documentation
 | Method | Endpoint | Description |

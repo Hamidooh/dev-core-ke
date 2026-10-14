@@ -105,7 +105,16 @@ function createFallbackDb(jsonFilePath) {
             if (params.min_credibility > 0) {
               list = list.filter(j => (j.credibility_score || 0) >= params.min_credibility);
             }
-            return list.reverse();
+            if (params.today) {
+              list = list.filter(j => (j.posted_date || '') >= params.today);
+            }
+            if (params.weekAgo) {
+              list = list.filter(j => (j.posted_date || '') >= params.weekAgo);
+            }
+            if (params.monthAgo) {
+              list = list.filter(j => (j.posted_date || '') >= params.monthAgo);
+            }
+            return list.sort((a, b) => (b.posted_date || '').localeCompare(a.posted_date || '') || (b.id - a.id));
           }
         };
       }
@@ -2576,6 +2585,7 @@ const server = http.createServer(async (req, res) => {
       const domain = reqUrl.searchParams.get('domain') || '';
       const location_type = reqUrl.searchParams.get('location_type') || '';
       const min_credibility = parseInt(reqUrl.searchParams.get('min_credibility') || '0', 10);
+      const sort = reqUrl.searchParams.get('sort') || 'newest';
 
       let query = 'SELECT * FROM jobs WHERE 1=1';
       const params = {};
@@ -2601,7 +2611,31 @@ const server = http.createServer(async (req, res) => {
         params.min_credibility = min_credibility;
       }
 
-      query += ' ORDER BY id DESC';
+      // Date Range Filters
+      const now = new Date();
+      const todayStr = now.toISOString().split('T')[0];
+      const weekAgoStr = new Date(now.getTime() - 7 * 86400000).toISOString().split('T')[0];
+      const monthAgoStr = new Date(now.getTime() - 30 * 86400000).toISOString().split('T')[0];
+
+      if (sort === 'today') {
+        query += ` AND posted_date >= @today`;
+        params.today = todayStr;
+      } else if (sort === 'week') {
+        query += ` AND posted_date >= @weekAgo`;
+        params.weekAgo = weekAgoStr;
+      } else if (sort === 'month') {
+        query += ` AND posted_date >= @monthAgo`;
+        params.monthAgo = monthAgoStr;
+      }
+
+      // Sorting
+      if (sort === 'credibility') {
+        query += ' ORDER BY credibility_score DESC, posted_date DESC, id DESC';
+      } else if (sort === 'salary') {
+        query += ' ORDER BY COALESCE(salary_kes_max, salary_usd_max * 130, 0) DESC, posted_date DESC, id DESC';
+      } else {
+        query += ' ORDER BY posted_date DESC, id DESC';
+      }
       const jobs = db.prepare(query).all(params);
 
       res.writeHead(200, { 'Content-Type': 'application/json' });

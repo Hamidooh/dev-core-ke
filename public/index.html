@@ -297,6 +297,8 @@
           <!-- Quick Filters -->
           <div class="flex items-center gap-1.5 flex-wrap">
             <span class="text-slate-800 font-bold mr-1">Quick Select:</span>
+            <button onclick="quickFilterDate('today')" class="px-2.5 py-1 rounded-md bg-[#BEBEBE] hover:bg-[#B0B0B0] text-sky-950 font-bold border border-[#9E9E9E] shadow-2xs"><i class="fa-solid fa-sparkles text-sky-600 mr-1"></i>Added Today</button>
+            <button onclick="quickFilterDate('week')" class="px-2.5 py-1 rounded-md bg-[#BEBEBE] hover:bg-[#B0B0B0] text-indigo-950 font-bold border border-[#9E9E9E] shadow-2xs"><i class="fa-regular fa-clock text-indigo-600 mr-1"></i>Past 7 Days</button>
             <button onclick="quickFilterSeniority('attachment')" class="px-2.5 py-1 rounded-md bg-[#BEBEBE] hover:bg-[#B0B0B0] text-blue-900 font-bold border border-[#9E9E9E] shadow-2xs">Attachment</button>
             <button onclick="quickFilterSeniority('junior')" class="px-2.5 py-1 rounded-md bg-[#BEBEBE] hover:bg-[#B0B0B0] text-emerald-900 font-bold border border-[#9E9E9E] shadow-2xs">Junior Dev</button>
             <button onclick="quickFilterSeniority('senior')" class="px-2.5 py-1 rounded-md bg-[#BEBEBE] hover:bg-[#B0B0B0] text-purple-900 font-bold border border-[#9E9E9E] shadow-2xs">Senior SWE</button>
@@ -314,9 +316,24 @@
           </h2>
           <p class="text-xs text-slate-400 mt-0.5">Every role has undergone credibility scanning, salary assessment, and Kenyan accessibility checks.</p>
         </div>
-        <button onclick="openModal('modal-post-job')" class="self-start sm:self-auto text-xs font-semibold px-3 py-1.5 rounded-lg bg-surface-800 hover:bg-surface-700 text-brand-400 border border-brand-500/30 transition">
-          <i class="fa-solid fa-plus mr-1"></i> Post a Job Offer
-        </button>
+        <div class="flex flex-wrap items-center gap-2">
+          <!-- Date / Sort Selector -->
+          <div class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-surface-900 border border-surface-700 rounded-xl text-xs shadow-2xs">
+            <i class="fa-regular fa-calendar-days text-brand-600"></i>
+            <span class="text-slate-700 font-bold">Sort:</span>
+            <select id="filter-sort" onchange="loadJobs()" class="bg-transparent text-slate-900 font-bold text-xs focus:outline-none cursor-pointer">
+              <option value="newest">📅 Newest Posted First</option>
+              <option value="today">✨ Added Today Only</option>
+              <option value="week">🕒 Past 7 Days</option>
+              <option value="month">📆 Past 30 Days</option>
+              <option value="credibility">🛡️ Highest Credibility</option>
+              <option value="salary">💰 Highest Salary</option>
+            </select>
+          </div>
+          <button onclick="openModal('modal-post-job')" class="self-start sm:self-auto text-xs font-semibold px-3 py-1.5 rounded-lg bg-surface-800 hover:bg-surface-700 text-brand-400 border border-brand-500/30 transition shadow-2xs">
+            <i class="fa-solid fa-plus mr-1"></i> Post a Job Offer
+          </button>
+        </div>
       </div>
 
       <!-- Job Cards Grid -->

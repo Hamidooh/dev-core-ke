@@ -93,6 +93,14 @@ function quickFilterLocation(val) {
   loadJobs();
 }
 
+function quickFilterDate(range) {
+  const sortSelect = document.getElementById('filter-sort');
+  if (sortSelect) {
+    sortSelect.value = range === 'today' ? 'today' : (range === 'week' ? 'week' : 'newest');
+  }
+  loadJobs();
+}
+
 // Load Jobs from API
 async function loadJobs() {
   const grid = document.getElementById('jobs-grid');
@@ -102,13 +110,15 @@ async function loadJobs() {
   const domain = document.getElementById('filter-domain')?.value || 'all';
   const location_type = document.getElementById('filter-location')?.value || 'all';
   const min_credibility = document.getElementById('filter-credibility')?.value || '0';
+  const sort = document.getElementById('filter-sort')?.value || 'newest';
 
   const params = new URLSearchParams({
     q,
     seniority,
     domain,
     location_type,
-    min_credibility
+    min_credibility,
+    sort
   });
 
   try {
@@ -150,6 +160,7 @@ function resetFilters() {
   if (document.getElementById('filter-seniority')) document.getElementById('filter-seniority').value = 'all';
   if (document.getElementById('filter-domain')) document.getElementById('filter-domain').value = 'all';
   if (document.getElementById('filter-location')) document.getElementById('filter-location').value = 'all';
+  if (document.getElementById('filter-sort')) document.getElementById('filter-sort').value = 'newest';
   if (document.getElementById('filter-credibility')) {
     document.getElementById('filter-credibility').value = '0';
     document.getElementById('credibility-val').innerText = '0+';
@@ -293,6 +304,87 @@ function renderJobCard(job) {
     `;
   }
 
+// Format Posting Date with relative distance and calendar date
+function formatPostedDate(dateStr) {
+  if (!dateStr) {
+    return {
+      label: 'Recent Opening',
+      relative: 'Recently',
+      fullDate: 'Recently Posted',
+      badgeClass: 'text-slate-800 bg-surface-800 border border-slate-300',
+      icon: 'fa-regular fa-clock text-slate-600',
+      isFresh: false
+    };
+  }
+
+  const cleanStr = String(dateStr).split('T')[0];
+  const parts = cleanStr.split('-').map(Number);
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  
+  const postYear = parts[0];
+  const postMonth = parts[1] - 1;
+  const postDay = parts[2];
+  
+  const postDate = (postYear && parts[1] && postDay) ? new Date(postYear, postMonth, postDay) : new Date(dateStr);
+  const fullDate = (postYear && parts[1] && postDay) 
+    ? `${monthNames[postMonth]} ${postDay}, ${postYear}` 
+    : cleanStr;
+
+  const now = new Date();
+  const todayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const postDateStart = new Date(postDate.getFullYear(), postDate.getMonth(), postDate.getDate());
+  
+  const diffTime = todayDate.getTime() - postDateStart.getTime();
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+  if (diffDays <= 0) {
+    return {
+      label: 'Added Today',
+      relative: 'Today',
+      fullDate,
+      badgeClass: 'text-sky-950 bg-sky-100 border border-sky-300 shadow-2xs',
+      icon: 'fa-solid fa-sparkles text-sky-600',
+      isFresh: true
+    };
+  } else if (diffDays === 1) {
+    return {
+      label: 'Yesterday',
+      relative: 'Yesterday',
+      fullDate,
+      badgeClass: 'text-emerald-950 bg-emerald-100 border border-emerald-300 shadow-2xs',
+      icon: 'fa-regular fa-calendar-check text-emerald-700',
+      isFresh: true
+    };
+  } else if (diffDays <= 7) {
+    return {
+      label: `${diffDays}d ago`,
+      relative: `${diffDays} days ago`,
+      fullDate,
+      badgeClass: 'text-indigo-950 bg-indigo-100 border border-indigo-300 shadow-2xs',
+      icon: 'fa-regular fa-calendar text-indigo-600',
+      isFresh: true
+    };
+  } else if (diffDays <= 14) {
+    return {
+      label: `${Math.round(diffDays / 7)}w ago`,
+      relative: `${Math.round(diffDays / 7)} weeks ago`,
+      fullDate,
+      badgeClass: 'text-slate-800 bg-surface-800 border border-slate-300 shadow-2xs',
+      icon: 'fa-regular fa-clock text-slate-600',
+      isFresh: false
+    };
+  } else {
+    return {
+      label: fullDate,
+      relative: `${diffDays}d ago`,
+      fullDate,
+      badgeClass: 'text-slate-800 bg-surface-800 border border-slate-300 shadow-2xs',
+      icon: 'fa-regular fa-calendar-days text-slate-500',
+      isFresh: false
+    };
+  }
+}
+
   // Formatting salary
   let salaryDisplay = '';
   if (job.currency_display === 'USD' && job.salary_usd_min) {
@@ -304,8 +396,7 @@ function renderJobCard(job) {
   }
 
   const tags = (job.tags || '').split(',').filter(Boolean);
-  const today = new Date().toISOString().split('T')[0];
-  const isToday = job.posted_date === today;
+  const dateInfo = formatPostedDate(job.posted_date);
   const isLinkedIn = (job.tags || '').includes('LinkedIn') || (job.company_domain || '').includes('linkedin') || (job.apply_url || '').includes('linkedin.com');
   const applyAction = getApplyLinkData(job);
 
@@ -318,7 +409,9 @@ function renderJobCard(job) {
             <span class="px-2.5 py-0.5 rounded-md text-xs font-mono font-semibold badge-${job.seniority}">
               ${seniorityLabelMap[job.seniority] || job.seniority}
             </span>
-            ${isToday ? `<span class="inline-flex items-center gap-1 text-[10px] font-bold text-sky-900 bg-sky-100 border border-sky-300 px-2 py-0.5 rounded shadow-2xs"><i class="fa-solid fa-sparkles text-sky-600"></i> Added Today</span>` : ''}
+            <span class="job-date-badge ${dateInfo.badgeClass}" title="Posted on ${dateInfo.fullDate}">
+              <i class="${dateInfo.icon}"></i> ${dateInfo.label}
+            </span>
           </div>
           ${credibilityBadge}
         </div>
@@ -331,6 +424,9 @@ function renderJobCard(job) {
         <div class="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-slate-700">
           <span class="font-bold text-slate-900 flex items-center gap-1">
             <i class="fa-regular fa-building text-slate-600"></i> ${job.company}
+          </span>
+          <span class="job-date-meta" title="Date Published: ${dateInfo.fullDate}">
+            <i class="fa-regular fa-calendar-days"></i> Posted ${dateInfo.fullDate}
           </span>
           ${isLinkedIn ? '<span class="inline-flex items-center gap-0.5 text-[11px] font-bold text-[#0A66C2] bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded shadow-2xs"><i class="fa-brands fa-linkedin text-[#0A66C2]"></i> LinkedIn</span>' : ''}
           ${job.brs_verified ? '<span class="inline-flex items-center gap-0.5 text-[11px] font-bold text-emerald-800 bg-emerald-100/90 border border-emerald-300 px-1.5 py-0.5 rounded shadow-2xs"><i class="fa-solid fa-circle-check text-emerald-700"></i> BRS Reg</span>' : ''}
@@ -404,6 +500,7 @@ function openJobDetail(id) {
 
   const isScam = job.scam_risk === 'HIGH' || job.credibility_score < 40;
   const applyAction = getApplyLinkData(job);
+  const dateInfo = formatPostedDate(job.posted_date);
 
   container.innerHTML = `
     <div>
@@ -424,7 +521,9 @@ function openJobDetail(id) {
         <span class="font-bold text-white"><i class="fa-solid fa-building text-brand-500 mr-1"></i> ${job.company}</span>
         <span><i class="fa-solid fa-globe text-blue-700 mr-1"></i> ${job.company_domain || 'Unverified domain'}</span>
         <span><i class="fa-solid fa-map-pin text-rose-400 mr-1"></i> ${job.location} (${job.location_type})</span>
-        <span><i class="fa-solid fa-calendar mr-1 text-slate-500"></i> Posted ${job.posted_date}</span>
+        <span class="job-date-meta" title="Date Published: ${dateInfo.fullDate}">
+          <i class="fa-regular fa-calendar-check text-brand-600"></i> Posted: ${dateInfo.fullDate} (${dateInfo.relative})
+        </span>
       </div>
 
       ${isScam ? `

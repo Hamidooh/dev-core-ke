@@ -172,6 +172,9 @@ nav {
   box-shadow: 0 2px 5px -1px rgba(0, 0, 0, 0.08), 0 1px 3px -1px rgba(0, 0, 0, 0.05) !important;
   transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s ease;
   height: auto !important;
+  position: relative !important;
+  overflow: hidden !important;
+  contain: layout;
 }
 
 .job-desc-clamp {

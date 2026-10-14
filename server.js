@@ -1287,7 +1287,7 @@ async function fetchArbeitnowJobs() {
     const titleLower = (item.title || '').toLowerCase();
     const descLower = (item.description || '').toLowerCase();
     // Exclude non-software engineering disciplines (e.g. Civil, Geotechnical, Structural, HVAC, Sales, Medical)
-    if (titleLower.includes('civil') || titleLower.includes('geotechnical') || titleLower.includes('structural') || titleLower.includes('hvac') || titleLower.includes('sales') || titleLower.includes('marketing') || titleLower.includes('recruiter') || titleLower.includes('accountant') || titleLower.includes('finance manager')) {
+    if (titleLower.includes('civil') || titleLower.includes('geotechnical') || titleLower.includes('structural') || titleLower.includes('hvac') || titleLower.includes('sales') || titleLower.includes('account executive') || titleLower.includes('marketing') || titleLower.includes('recruiter') || titleLower.includes('accountant') || titleLower.includes('finance manager') || titleLower.includes('ecommerce executive') || titleLower.includes('growth manager')) {
       return false;
     }
     const text = `${titleLower} ${(item.tags || []).join(' ')} ${descLower}`;

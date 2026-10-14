@@ -385,6 +385,21 @@ function formatPostedDate(dateStr) {
   }
 }
 
+// Sanitizes and strips all raw HTML tags to prevent DOM corruption
+function cleanText(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/<[^>]*>?/gm, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
   // Formatting salary
   let salaryDisplay = '';
   if (job.currency_display === 'USD' && job.salary_usd_min) {
@@ -397,6 +412,7 @@ function formatPostedDate(dateStr) {
 
   const tags = (job.tags || '').split(',').filter(Boolean);
   const dateInfo = formatPostedDate(job.posted_date);
+  const cleanDesc = cleanText(job.description);
   const isLinkedIn = (job.tags || '').includes('LinkedIn') || (job.company_domain || '').includes('linkedin') || (job.apply_url || '').includes('linkedin.com');
   const applyAction = getApplyLinkData(job);
 
@@ -440,7 +456,7 @@ function formatPostedDate(dateStr) {
 
         <!-- Excerpt with clean clamping -->
         <p class="job-desc-clamp text-xs mt-3 leading-relaxed">
-          ${job.description}
+          ${cleanDesc}
         </p>
 
         <!-- Tags -->
@@ -550,17 +566,17 @@ function openJobDetail(id) {
       <div class="mt-5 space-y-4 text-xs sm:text-sm text-slate-300">
         <div>
           <h4 class="font-bold text-white text-xs uppercase tracking-wider font-mono text-slate-400 mb-1">About This Role</h4>
-          <p class="leading-relaxed bg-surface-900 p-3.5 rounded-xl border border-surface-750">${job.description}</p>
+          <p class="leading-relaxed bg-surface-900 p-3.5 rounded-xl border border-surface-750">${cleanText(job.description)}</p>
         </div>
 
         <div>
           <h4 class="font-bold text-white text-xs uppercase tracking-wider font-mono text-slate-400 mb-1">Candidate Requirements</h4>
-          <p class="leading-relaxed bg-surface-900 p-3.5 rounded-xl border border-surface-750">${job.requirements || 'Standard computer science degree or demonstrable portfolio.'}</p>
+          <p class="leading-relaxed bg-surface-900 p-3.5 rounded-xl border border-surface-750">${cleanText(job.requirements) || 'Standard computer science degree or demonstrable portfolio.'}</p>
         </div>
 
         <div>
           <h4 class="font-bold text-white text-xs uppercase tracking-wider font-mono text-slate-400 mb-1">Benefits & Perks for Kenyan Engineers</h4>
-          <p class="leading-relaxed bg-surface-900 p-3.5 rounded-xl border border-surface-750">${job.benefits || 'Standard health cover, hardware allowance, flexible leave.'}</p>
+          <p class="leading-relaxed bg-surface-900 p-3.5 rounded-xl border border-surface-750">${cleanText(job.benefits) || 'Standard health cover, hardware allowance, flexible leave.'}</p>
         </div>
       </div>
 

@@ -1266,7 +1266,7 @@ async function loadDeveloperAnalytics(pin, isFromForm = false) {
       if (dashView) dashView.classList.add('hidden');
       if (errBox) {
         errBox.classList.remove('hidden');
-        if (errMsg) errMsg.textContent = data.message || 'Invalid developer PIN entered. Try default: dev2026';
+        if (errMsg) errMsg.textContent = data.message || 'Access denied: Invalid developer PIN.';
       }
     }
   } catch (err) {
@@ -1278,7 +1278,11 @@ async function loadDeveloperAnalytics(pin, isFromForm = false) {
 }
 
 function refreshDeveloperAnalytics() {
-  const pin = sessionStorage.getItem('dev_core_admin_pin') || 'dev2026';
+  const pin = sessionStorage.getItem('dev_core_admin_pin');
+  if (!pin) {
+    showDeveloperAuthView();
+    return;
+  }
   const icon = document.getElementById('dev-refresh-icon');
   if (icon) icon.classList.add('fa-spin');
   loadDeveloperAnalytics(pin).finally(() => {

@@ -7,6 +7,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const PORT = process.env.PORT || 3000;
 const ADMIN_PIN = process.env.ADMIN_PIN || 'dev2026';
+const HASH_SALT = process.env.HASH_SALT || 'dev-core-ke-prod-salt';
 const DB_DIR = path.join(__dirname, 'data');
 const DB_FILE = path.join(DB_DIR, 'devcircle.sqlite');
 const DB_JSON_FILE = path.join(DB_DIR, 'devcircle_data.json');
@@ -3151,7 +3152,7 @@ const server = http.createServer(async (req, res) => {
       if (!isBotRequest(ua)) {
         const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1').split(',')[0].trim();
         const visitorHash = crypto.createHash('sha256')
-          .update(`${ip}::${ua}::dev-core-salt-2026`)
+          .update(`${ip}::${ua}::${HASH_SALT}`)
           .digest('hex')
           .slice(0, 16);
 

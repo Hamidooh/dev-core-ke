@@ -114,11 +114,11 @@
 
     <!-- Mobile Nav Bar -->
     <div class="flex lg:hidden overflow-x-auto gap-2 pt-3 pb-1 text-xs border-t border-surface-800 mt-2 scrollbar-none">
-      <button onclick="switchTab('jobs')" class="whitespace-nowrap px-3 py-1.5 rounded-lg bg-surface-800 text-slate-700">Roles</button>
-      <button onclick="switchTab('credibility')" class="whitespace-nowrap px-3 py-1.5 rounded-lg bg-surface-800 text-slate-700">Credibility</button>
-      <button onclick="switchTab('matrix')" class="whitespace-nowrap px-3 py-1.5 rounded-lg bg-surface-800 text-slate-700">Career Levels</button>
-      <button onclick="switchTab('reviews')" class="whitespace-nowrap px-3 py-1.5 rounded-lg bg-surface-800 text-slate-700">Reviews</button>
-      <button onclick="switchTab('analytics')" class="whitespace-nowrap px-3 py-1.5 rounded-lg bg-surface-800 text-slate-700">Salaries</button>
+      <button id="mob-tab-btn-jobs" onclick="switchTab('jobs')" class="whitespace-nowrap px-3 py-1.5 rounded-lg bg-surface-800 text-slate-700">Roles</button>
+      <button id="mob-tab-btn-credibility" onclick="switchTab('credibility')" class="whitespace-nowrap px-3 py-1.5 rounded-lg bg-surface-800 text-slate-700">Credibility</button>
+      <button id="mob-tab-btn-matrix" onclick="switchTab('matrix')" class="whitespace-nowrap px-3 py-1.5 rounded-lg bg-surface-800 text-slate-700">Career Levels</button>
+      <button id="mob-tab-btn-reviews" onclick="switchTab('reviews')" class="whitespace-nowrap px-3 py-1.5 rounded-lg bg-surface-800 text-slate-700">Reviews</button>
+      <button id="mob-tab-btn-analytics" onclick="switchTab('analytics')" class="whitespace-nowrap px-3 py-1.5 rounded-lg bg-surface-800 text-slate-700">Salaries</button>
     </div>
   </nav>
 
@@ -198,8 +198,8 @@
       <div class="bg-surface-850 border border-surface-700 rounded-2xl p-5 mb-8 shadow-xl">
         <div class="grid grid-cols-1 md:grid-cols-12 gap-3.5">
           <!-- Text Search + LinkedIn Direct Search -->
-          <div class="md:col-span-5 flex items-center gap-2">
-            <div class="relative flex-1">
+          <div class="md:col-span-5 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+            <div class="relative flex-1 min-w-0">
               <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
                 <i class="fa-solid fa-magnifying-glass"></i>
               </div>
@@ -216,7 +216,7 @@
               href="https://www.linkedin.com/jobs/search/?keywords=software%20engineer&location=Kenya" 
               target="_blank" 
               rel="noopener noreferrer" 
-              class="inline-flex items-center gap-1.5 px-3 py-2.5 bg-[#0A66C2] hover:bg-[#004182] text-white text-xs font-bold rounded-xl transition shadow-sm shrink-0 whitespace-nowrap cursor-pointer"
+              class="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 bg-[#0A66C2] hover:bg-[#004182] text-white text-xs font-bold rounded-xl transition shadow-sm shrink-0 whitespace-nowrap cursor-pointer"
               title="Search live public job postings on LinkedIn for Kenya & Worldwide Remote"
             >
               <i class="fa-brands fa-linkedin text-sm"></i>
@@ -307,14 +307,14 @@
       </div>
 
       <!-- Live Results Header -->
-      <div class="flex justify-between items-center mb-5">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
         <div>
           <h2 class="text-lg font-bold text-white flex items-center gap-2">
             Available Verified Positions <span id="jobs-count-badge" class="px-2 py-0.5 rounded-full text-xs bg-brand-500/20 text-brand-400 font-mono border border-brand-500/30">Loading...</span>
           </h2>
           <p class="text-xs text-slate-400 mt-0.5">Every role has undergone credibility scanning, salary assessment, and Kenyan accessibility checks.</p>
         </div>
-        <button onclick="openModal('modal-post-job')" class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-surface-800 hover:bg-surface-700 text-brand-400 border border-brand-500/30 transition">
+        <button onclick="openModal('modal-post-job')" class="self-start sm:self-auto text-xs font-semibold px-3 py-1.5 rounded-lg bg-surface-800 hover:bg-surface-700 text-brand-400 border border-brand-500/30 transition">
           <i class="fa-solid fa-plus mr-1"></i> Post a Job Offer
         </button>
       </div>

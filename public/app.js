@@ -17,6 +17,7 @@ function switchTab(tabName) {
   tabs.forEach(t => {
     const section = document.getElementById(`section-${t}`);
     const btn = document.getElementById(`tab-btn-${t}`);
+    const mobBtn = document.getElementById(`mob-tab-btn-${t}`);
     if (section) {
       if (t === tabName) {
         section.classList.remove('hidden');
@@ -29,6 +30,13 @@ function switchTab(tabName) {
         btn.classList.add('active');
       } else {
         btn.classList.remove('active');
+      }
+    }
+    if (mobBtn) {
+      if (t === tabName) {
+        mobBtn.classList.add('active-mobile-tab');
+      } else {
+        mobBtn.classList.remove('active-mobile-tab');
       }
     }
   });
@@ -305,7 +313,7 @@ function renderJobCard(job) {
     <div class="job-card bg-surface-850 border ${isScam ? 'border-rose-500/40' : 'border-surface-700/80'} rounded-2xl p-5 flex flex-col">
       <div>
         <!-- Top Metadata & Credibility Badge -->
-        <div class="flex items-start justify-between gap-2 mb-2.5">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-2.5">
           <div class="flex flex-wrap items-center gap-1.5">
             <span class="px-2.5 py-0.5 rounded-md text-xs font-mono font-semibold badge-${job.seniority}">
               ${seniorityLabelMap[job.seniority] || job.seniority}
@@ -345,8 +353,8 @@ function renderJobCard(job) {
         </div>
       </div>
 
-      <!-- Card Bottom: Salary & Actions -->
-      <div class="mt-4 pt-3.5 border-t border-surface-750 flex flex-wrap items-center justify-between gap-2 text-xs">
+      <!-- Card Bottom: Salary & Actions (Directly below tags, responsive wrap) -->
+      <div class="mt-4 pt-3.5 border-t border-surface-750 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
         <div>
           <span class="text-slate-600 font-mono block text-[10px] font-bold">COMPENSATION:</span>
           <span class="font-extrabold font-mono ${isScam ? 'text-rose-900' : 'text-emerald-950'} text-xs sm:text-sm">
@@ -354,7 +362,7 @@ function renderJobCard(job) {
           </span>
         </div>
 
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 flex-wrap">
           <a 
             href="https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(job.company + ' ' + job.title)}" 
             target="_blank" 
@@ -363,11 +371,11 @@ function renderJobCard(job) {
             title="Search for this opening and recruiter on LinkedIn"
           >
             <i class="fa-brands fa-linkedin"></i>
-            <span class="hidden sm:inline">LinkedIn</span>
+            <span>LinkedIn</span>
           </a>
           <button 
             onclick="openJobDetail(${job.id})" 
-            class="px-3 py-1.5 rounded-lg bg-surface-800 hover:bg-surface-700 text-slate-200 border border-surface-650 font-semibold transition cursor-pointer"
+            class="px-3 py-1.5 rounded-lg bg-surface-800 hover:bg-surface-700 text-slate-800 border border-surface-650 font-semibold transition cursor-pointer"
           >
             Details
           </button>

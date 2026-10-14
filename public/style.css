@@ -470,6 +470,34 @@ footer strong {
   color: #0369a1 !important;
 }
 
+/* Mobile Alignment & Compact Adjustments */
+@media (max-width: 640px) {
+  .hero-stat-card {
+    padding: 0.65rem 0.75rem !important;
+    border-radius: 0.75rem !important;
+  }
+  .hero-stat-label {
+    font-size: 0.68rem !important;
+    white-space: nowrap !important;
+  }
+  .hero-stat-value {
+    font-size: 0.98rem !important;
+    margin-top: 0.15rem !important;
+  }
+  .hero-stat-sub {
+    font-size: 0.62rem !important;
+    margin-top: 0.15rem !important;
+  }
+}
+
+.active-mobile-tab {
+  background-color: #b8b8b8 !important;
+  color: #1d4ed8 !important;
+  border-color: #1d4ed8 !important;
+  box-shadow: 0 1px 3px rgba(29, 78, 216, 0.25) !important;
+  font-weight: 700 !important;
+}
+
 .hero-stat-sub-muted {
   color: #475569 !important;
 }

@@ -4,6 +4,7 @@ services:
     runtime: node
     plan: free
     region: oregon
+    autoDeploy: true
     buildCommand: ""
     startCommand: node --experimental-sqlite server.js || node server.js
     envVars:

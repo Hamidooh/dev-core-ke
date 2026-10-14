@@ -3,6 +3,7 @@ let searchDebounceTimer = null;
 let currentJobs = [];
 
 document.addEventListener('DOMContentLoaded', () => {
+  recordPageVisit();
   loadJobs();
   loadRolesMatrix();
   loadAnalytics();
@@ -1159,3 +1160,308 @@ function copyKeepAliveUrl() {
     });
   }
 }
+
+// ==========================================
+// DEVELOPER PORTAL & VISITOR TELEMETRY ENGINE
+// ==========================================
+
+// Automatically send privacy-safe visit telemetry on page load
+function recordPageVisit() {
+  try {
+    const payload = {
+      path: window.location.pathname + window.location.hash,
+      referrer: document.referrer || 'Direct / Bookmark',
+      screen: `${window.innerWidth}x${window.innerHeight}`,
+      title: document.title || 'DEV CORE KE'
+    };
+    fetch('/api/telemetry/visit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).catch(() => {});
+  } catch (e) {
+    // Non-blocking silent catch
+  }
+}
+
+function openDeveloperPortal() {
+  openModal('modal-developer-portal');
+  const savedPin = sessionStorage.getItem('dev_core_admin_pin');
+  if (savedPin) {
+    loadDeveloperAnalytics(savedPin);
+  } else {
+    showDeveloperAuthView();
+  }
+}
+
+function showDeveloperAuthView() {
+  const authView = document.getElementById('dev-portal-auth-view');
+  const dashView = document.getElementById('dev-portal-dashboard-view');
+  const errBox = document.getElementById('dev-portal-auth-error');
+  const pinInput = document.getElementById('input-dev-pin');
+
+  if (authView) authView.classList.remove('hidden');
+  if (dashView) dashView.classList.add('hidden');
+  if (errBox) errBox.classList.add('hidden');
+  if (pinInput) {
+    setTimeout(() => pinInput.focus(), 150);
+  }
+}
+
+function togglePinVisibility() {
+  const pinInput = document.getElementById('input-dev-pin');
+  const eyeIcon = document.getElementById('dev-pin-eye-icon');
+  if (pinInput && eyeIcon) {
+    if (pinInput.type === 'password') {
+      pinInput.type = 'text';
+      eyeIcon.className = 'fa-solid fa-eye-slash';
+    } else {
+      pinInput.type = 'password';
+      eyeIcon.className = 'fa-solid fa-eye';
+    }
+  }
+}
+
+async function submitDeveloperPin(e) {
+  if (e) e.preventDefault();
+  const pinInput = document.getElementById('input-dev-pin');
+  const btn = document.getElementById('btn-unlock-portal');
+  const errBox = document.getElementById('dev-portal-auth-error');
+
+  const pin = (pinInput ? pinInput.value : '').trim();
+  if (!pin) return;
+
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin mr-1.5"></i> Authenticating...';
+  }
+  if (errBox) errBox.classList.add('hidden');
+
+  await loadDeveloperAnalytics(pin, true);
+
+  if (btn) {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa-solid fa-lock-open mr-1.5"></i> Unlock Dashboard';
+  }
+}
+
+async function loadDeveloperAnalytics(pin, isFromForm = false) {
+  const authView = document.getElementById('dev-portal-auth-view');
+  const dashView = document.getElementById('dev-portal-dashboard-view');
+  const errBox = document.getElementById('dev-portal-auth-error');
+  const errMsg = document.getElementById('dev-portal-error-msg');
+
+  try {
+    const res = await fetch(`/api/admin/analytics?pin=${encodeURIComponent(pin)}`);
+    const data = await res.json();
+
+    if (res.status === 200 && data.status === 'success') {
+      sessionStorage.setItem('dev_core_admin_pin', pin);
+      if (authView) authView.classList.add('hidden');
+      if (dashView) dashView.classList.remove('hidden');
+      renderDeveloperAnalytics(data.analytics);
+    } else {
+      sessionStorage.removeItem('dev_core_admin_pin');
+      if (authView) authView.classList.remove('hidden');
+      if (dashView) dashView.classList.add('hidden');
+      if (errBox) {
+        errBox.classList.remove('hidden');
+        if (errMsg) errMsg.textContent = data.message || 'Invalid developer PIN entered. Try default: dev2026';
+      }
+    }
+  } catch (err) {
+    if (errBox) {
+      errBox.classList.remove('hidden');
+      if (errMsg) errMsg.textContent = 'Connection error: ' + err.message;
+    }
+  }
+}
+
+function refreshDeveloperAnalytics() {
+  const pin = sessionStorage.getItem('dev_core_admin_pin') || 'dev2026';
+  const icon = document.getElementById('dev-refresh-icon');
+  if (icon) icon.classList.add('fa-spin');
+  loadDeveloperAnalytics(pin).finally(() => {
+    setTimeout(() => {
+      if (icon) icon.classList.remove('fa-spin');
+    }, 400);
+  });
+}
+
+function lockDeveloperPortal() {
+  sessionStorage.removeItem('dev_core_admin_pin');
+  const pinInput = document.getElementById('input-dev-pin');
+  if (pinInput) pinInput.value = '';
+  showDeveloperAuthView();
+}
+
+function renderDeveloperAnalytics(analytics) {
+  if (!analytics) return;
+
+  // 1. Metric Counters
+  const elPageviews = document.getElementById('dev-metric-pageviews');
+  const elUniques = document.getElementById('dev-metric-uniques');
+  const elTodayPageviews = document.getElementById('dev-metric-today-pageviews');
+  const elTodayUniques = document.getElementById('dev-metric-today-uniques');
+  const elTodaySub = document.getElementById('dev-metric-today-sub');
+  const elActive30m = document.getElementById('dev-metric-active-30m');
+
+  if (elPageviews) elPageviews.textContent = Number(analytics.total_pageviews || 0).toLocaleString();
+  if (elUniques) elUniques.textContent = Number(analytics.unique_visitors_all_time || 0).toLocaleString();
+  if (elTodayPageviews) elTodayPageviews.textContent = Number(analytics.today_pageviews || 0).toLocaleString();
+  if (elTodayUniques) elTodayUniques.textContent = Number(analytics.today_uniques || 0).toLocaleString();
+  if (elTodaySub) elTodaySub.textContent = `vs ${analytics.yesterday_pageviews || 0} yesterday (${analytics.yesterday_uniques || 0} unique)`;
+  if (elActive30m) elActive30m.textContent = analytics.active_past_30m || 1;
+
+  // 2. 7-Day Daily Bar Chart
+  const chartContainer = document.getElementById('dev-chart-bars');
+  if (chartContainer && Array.isArray(analytics.daily_trends)) {
+    const maxVal = Math.max(...analytics.daily_trends.map(d => d.pageviews || 0), 10);
+    chartContainer.innerHTML = analytics.daily_trends.map(day => {
+      const pvPct = Math.max(8, Math.round(((day.pageviews || 0) / maxVal) * 100));
+      const uPct = Math.max(5, Math.round(((day.uniques || 0) / maxVal) * 100));
+      return `
+        <div class="flex-1 flex flex-col items-center justify-end h-full group relative cursor-pointer" title="${day.date}: ${day.pageviews} visits, ${day.uniques} unique">
+          <!-- Hover Tooltip -->
+          <div class="absolute -top-8 bg-surface-950 border border-surface-700 text-white text-[10px] py-1 px-1.5 rounded opacity-0 group-hover:opacity-100 transition pointer-events-none whitespace-nowrap z-10 font-mono shadow-lg">
+            ${day.pageviews} views / ${day.uniques} unq
+          </div>
+          <!-- Bars -->
+          <div class="w-full flex items-end justify-center gap-1.5 h-20">
+            <div style="height: ${pvPct}%;" class="w-2.5 sm:w-3.5 bg-gradient-to-t from-blue-600 to-sky-400 rounded-t-sm transition-all duration-300 shadow-sm shadow-sky-500/20"></div>
+            <div style="height: ${uPct}%;" class="w-2.5 sm:w-3.5 bg-gradient-to-t from-emerald-600 to-emerald-400 rounded-t-sm transition-all duration-300 shadow-sm shadow-emerald-500/20"></div>
+          </div>
+          <!-- Label -->
+          <span class="text-[10px] font-mono text-slate-300 mt-2 truncate w-full text-center">
+            ${day.label.split(',')[0]}
+          </span>
+        </div>
+      `;
+    }).join('');
+  }
+
+  // 3. Traffic Sources & Referrers List
+  const referrersContainer = document.getElementById('dev-referrers-list');
+  if (referrersContainer && Array.isArray(analytics.top_referrers)) {
+    const getRefIcon = (src) => {
+      const s = src.toLowerCase();
+      if (s.includes('linkedin')) return '<i class="fa-brands fa-linkedin text-[#0A66C2]"></i>';
+      if (s.includes('google')) return '<i class="fa-brands fa-google text-[#EA4335]"></i>';
+      if (s.includes('whatsapp')) return '<i class="fa-brands fa-whatsapp text-[#25D366]"></i>';
+      if (s.includes('twitter') || s.includes('x /')) return '<i class="fa-brands fa-x-twitter text-white"></i>';
+      if (s.includes('github')) return '<i class="fa-brands fa-github text-white"></i>';
+      return '<i class="fa-solid fa-link text-sky-400"></i>';
+    };
+
+    referrersContainer.innerHTML = analytics.top_referrers.map(r => `
+      <div>
+        <div class="flex items-center justify-between text-xs mb-1.5">
+          <span class="flex items-center gap-1.5 font-medium text-white">
+            ${getRefIcon(r.source)}
+            ${r.source}
+          </span>
+          <span class="font-mono text-slate-300 font-semibold">
+            ${r.count} <span class="text-[10px] text-slate-400">(${r.pct}%)</span>
+          </span>
+        </div>
+        <div class="w-full bg-slate-950/80 border border-slate-800 rounded-full h-2 overflow-hidden">
+          <div class="bg-gradient-to-r from-blue-600 to-sky-400 h-2 rounded-full" style="width: ${r.pct}%;"></div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  // 4. Devices Breakdown
+  const devicesContainer = document.getElementById('dev-devices-pills');
+  if (devicesContainer && analytics.devices) {
+    const totalDev = (analytics.devices.Desktop || 0) + (analytics.devices.Mobile || 0) + (analytics.devices.Tablet || 0) || 1;
+    const deskPct = Math.round(((analytics.devices.Desktop || 0) / totalDev) * 100);
+    const mobPct = Math.round(((analytics.devices.Mobile || 0) / totalDev) * 100);
+    const tabPct = Math.round(((analytics.devices.Tablet || 0) / totalDev) * 100);
+
+    devicesContainer.innerHTML = `
+      <div class="flex-1 bg-slate-900 border border-slate-750 p-2.5 rounded-xl text-center shadow-xs">
+        <div class="text-slate-300 text-[11px] flex items-center justify-center gap-1 font-mono">
+          <i class="fa-solid fa-desktop text-sky-400"></i> Desktop
+        </div>
+        <div class="text-lg font-extrabold text-white mt-0.5">${deskPct}%</div>
+        <div class="text-[10px] text-slate-400 font-mono">${analytics.devices.Desktop || 0} visits</div>
+      </div>
+      <div class="flex-1 bg-slate-900 border border-slate-750 p-2.5 rounded-xl text-center shadow-xs">
+        <div class="text-slate-300 text-[11px] flex items-center justify-center gap-1 font-mono">
+          <i class="fa-solid fa-mobile-screen text-emerald-400"></i> Mobile
+        </div>
+        <div class="text-lg font-extrabold text-white mt-0.5">${mobPct}%</div>
+        <div class="text-[10px] text-slate-400 font-mono">${analytics.devices.Mobile || 0} visits</div>
+      </div>
+      <div class="flex-1 bg-slate-900 border border-slate-750 p-2.5 rounded-xl text-center shadow-xs">
+        <div class="text-slate-300 text-[11px] flex items-center justify-center gap-1 font-mono">
+          <i class="fa-solid fa-tablet-screen-button text-purple-400"></i> Tablet
+        </div>
+        <div class="text-lg font-extrabold text-white mt-0.5">${tabPct}%</div>
+        <div class="text-[10px] text-slate-400 font-mono">${analytics.devices.Tablet || 0} visits</div>
+      </div>
+    `;
+  }
+
+  // 5. Browsers & OS Chips
+  const browsersContainer = document.getElementById('dev-browsers-list');
+  if (browsersContainer && Array.isArray(analytics.top_browsers)) {
+    browsersContainer.innerHTML = analytics.top_browsers.map(b => `
+      <span class="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-900 border border-slate-750 rounded-lg text-slate-200 font-mono text-[11px]">
+        <i class="fa-brands fa-${b.name.toLowerCase() === 'chrome' ? 'chrome text-emerald-400' : (b.name.toLowerCase() === 'safari' ? 'safari text-sky-400' : (b.name.toLowerCase() === 'firefox' ? 'firefox-browser text-amber-400' : 'edge text-brand-400'))}"></i>
+        ${b.name} <strong class="text-white ml-0.5">${b.pct}%</strong>
+      </span>
+    `).join('');
+  }
+
+  const osContainer = document.getElementById('dev-os-list');
+  if (osContainer && Array.isArray(analytics.top_os)) {
+    osContainer.innerHTML = analytics.top_os.map(o => `
+      <span class="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-900 border border-slate-750 rounded-lg text-slate-200 font-mono text-[11px]">
+        <i class="fa-brands fa-${o.name.toLowerCase() === 'windows' ? 'windows text-sky-400' : (o.name.toLowerCase() === 'android' ? 'android text-emerald-400' : (o.name.toLowerCase() === 'ios' ? 'apple text-slate-200' : (o.name.toLowerCase() === 'macos' ? 'apple text-slate-200' : 'linux text-amber-400')))}"></i>
+        ${o.name} <strong class="text-white ml-0.5">${o.pct}%</strong>
+      </span>
+    `).join('');
+  }
+
+  // 6. Recent Real-Time Visits Table
+  const visitsBody = document.getElementById('dev-recent-visits-body');
+  if (visitsBody && Array.isArray(analytics.recent_visits)) {
+    visitsBody.innerHTML = analytics.recent_visits.map(v => {
+      const devIcon = v.device === 'Mobile' ? 'fa-mobile-screen text-emerald-400' : (v.device === 'Tablet' ? 'fa-tablet-screen-button text-purple-400' : 'fa-laptop text-sky-400');
+      return `
+        <tr class="hover:bg-slate-850/80 transition">
+          <td class="py-2.5 px-3 font-mono text-[11px] text-slate-400">
+            <span class="text-emerald-400 font-semibold">${v.time_ago}</span>
+          </td>
+          <td class="py-2.5 px-3">
+            <span class="inline-flex items-center gap-1.5 font-medium text-slate-200">
+              <i class="fa-solid ${devIcon}"></i>
+              ${v.os}
+            </span>
+          </td>
+          <td class="py-2.5 px-3 font-mono text-[11px] text-slate-300">
+            ${v.browser}
+          </td>
+          <td class="py-2.5 px-3">
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-slate-200 border border-slate-700">
+              ${v.referrer}
+            </span>
+          </td>
+          <td class="py-2.5 px-3 font-mono text-[11px] text-slate-300">
+            ${v.path}
+          </td>
+        </tr>
+      `;
+    }).join('');
+  }
+}
+
+// Global shortcut Ctrl+Shift+D or Cmd+Shift+D to open developer portal
+window.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'd') {
+    e.preventDefault();
+    openDeveloperPortal();
+  }
+});

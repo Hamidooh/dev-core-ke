@@ -562,3 +562,93 @@ footer strong {
 ::-webkit-scrollbar-thumb:hover {
   background: #7a7a7a;
 }
+
+/* ======================================================== */
+/* DEVELOPER PORTAL TELEMETRY CONSOLE (DEDICATED DARK THEME) */
+/* ======================================================== */
+#modal-developer-portal > div {
+  background-color: #0f172a !important;
+  border: 1px solid #334155 !important;
+  color: #f8fafc !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7) !important;
+}
+
+#modal-developer-portal h3,
+#modal-developer-portal h4 {
+  color: #ffffff !important;
+}
+
+#modal-developer-portal .bg-slate-800\/90,
+#modal-developer-portal .bg-slate-800 {
+  background-color: #1e293b !important;
+  border: 1px solid #334155 !important;
+}
+
+#modal-developer-portal .bg-slate-900,
+#modal-developer-portal .bg-slate-900\/90,
+#modal-developer-portal .bg-slate-950 {
+  background-color: #0b1120 !important;
+  border: 1px solid #1e293b !important;
+}
+
+#modal-developer-portal input {
+  background-color: #020617 !important;
+  color: #ffffff !important;
+  border-color: #334155 !important;
+}
+
+#modal-developer-portal input:focus {
+  border-color: #38bdf8 !important;
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.25) !important;
+}
+
+#modal-developer-portal .text-white {
+  color: #ffffff !important;
+}
+
+#modal-developer-portal .text-slate-100 {
+  color: #f1f5f9 !important;
+}
+
+#modal-developer-portal .text-slate-200 {
+  color: #e2e8f0 !important;
+}
+
+#modal-developer-portal .text-slate-300 {
+  color: #cbd5e1 !important;
+}
+
+#modal-developer-portal .text-slate-400 {
+  color: #94a3b8 !important;
+}
+
+#modal-developer-portal .text-emerald-300,
+#modal-developer-portal .text-emerald-400 {
+  color: #34d399 !important;
+}
+
+#modal-developer-portal .text-sky-400 {
+  color: #38bdf8 !important;
+}
+
+#modal-developer-portal .text-purple-400 {
+  color: #c084fc !important;
+}
+
+#modal-developer-portal .text-brand-400 {
+  color: #60a5fa !important;
+}
+
+#modal-developer-portal table th {
+  background-color: #1e293b !important;
+  color: #94a3b8 !important;
+  border-bottom: 1px solid #334155 !important;
+}
+
+#modal-developer-portal table td {
+  border-bottom: 1px solid #1e293b !important;
+}
+
+#modal-developer-portal table tr:hover td {
+  background-color: #1e293b !important;
+}

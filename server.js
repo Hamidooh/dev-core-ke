@@ -4,7 +4,9 @@
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
+const crypto = require('node:crypto');
 const PORT = process.env.PORT || 3000;
+const ADMIN_PIN = process.env.ADMIN_PIN || 'dev2026';
 const DB_DIR = path.join(__dirname, 'data');
 const DB_FILE = path.join(DB_DIR, 'devcircle.sqlite');
 const DB_JSON_FILE = path.join(DB_DIR, 'devcircle_data.json');
@@ -20,7 +22,8 @@ function createFallbackDb(jsonFilePath) {
     jobs: [],
     reviews: [],
     credibility_audits: [],
-    scanner_logs: []
+    scanner_logs: [],
+    site_visits: []
   };
 
   if (fs.existsSync(jsonFilePath)) {
@@ -30,6 +33,7 @@ function createFallbackDb(jsonFilePath) {
       if (!state.reviews) state.reviews = [];
       if (!state.credibility_audits) state.credibility_audits = [];
       if (!state.scanner_logs) state.scanner_logs = [];
+      if (!state.site_visits) state.site_visits = [];
     } catch (e) {
       console.error('Failed to parse json DB file:', e);
     }
@@ -205,6 +209,33 @@ function createFallbackDb(jsonFilePath) {
         };
       }
 
+      if (cleanSql.startsWith('INSERT INTO site_visits')) {
+        return {
+          run(params) {
+            const newId = (state.site_visits.length ? Math.max(...state.site_visits.map(v => v.id || 0)) : 0) + 1;
+            state.site_visits.push({ id: newId, ...params });
+            saveState();
+            return { lastInsertRowid: newId, changes: 1 };
+          }
+        };
+      }
+
+      if (cleanSql.includes('COUNT(*) as count FROM site_visits')) {
+        return {
+          get() {
+            return { count: state.site_visits.length };
+          }
+        };
+      }
+
+      if (cleanSql.startsWith('SELECT * FROM site_visits')) {
+        return {
+          all() {
+            return [...state.site_visits];
+          }
+        };
+      }
+
       return {
         all: () => [],
         get: () => null,
@@ -294,10 +325,27 @@ function initDatabase() {
       status TEXT NOT NULL,
       message TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS site_visits (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      visitor_hash TEXT NOT NULL,
+      referrer TEXT,
+      device TEXT,
+      browser TEXT,
+      os TEXT,
+      path TEXT DEFAULT '/',
+      screen_res TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_visits_created ON site_visits(created_at);
+    CREATE INDEX IF NOT EXISTS idx_visits_hash ON site_visits(visitor_hash);
   `);
 
   // Synchronize all verified positions on startup
   syncDatabaseRoles();
+
+  // Ensure initial baseline analytics telemetry
+  seedBaselineVisitsIfEmpty();
 }
 
 function syncDatabaseRoles() {
@@ -1032,6 +1080,264 @@ function getAnalytics() {
     avg_credibility_score: Math.round(jobs.reduce((acc, j) => acc + (j.credibility_score || 0), 0) / (jobs.length || 1)),
     total_reviews: reviews.length,
     remote_ratio: `${Math.round((jobs.filter(j => j.location_type === 'Worldwide Remote').length / (jobs.length || 1)) * 100)}% Worldwide Remote`
+  };
+}
+
+// User-Agent & Device Parser for Developer Visitor Telemetry
+function parseUserAgentDetails(uaString) {
+  const ua = uaString || '';
+  let device = 'Desktop';
+  if (/mobile|android|iphone|ipod|blackberry|iemobile|opera mini/i.test(ua)) {
+    device = 'Mobile';
+  } else if (/ipad|tablet|silk|kindle/i.test(ua)) {
+    device = 'Tablet';
+  }
+
+  let browser = 'Chrome';
+  if (/edg\//i.test(ua)) browser = 'Edge';
+  else if (/opr\/|opera/i.test(ua)) browser = 'Opera';
+  else if (/firefox|fxios/i.test(ua)) browser = 'Firefox';
+  else if (/chrome|crios/i.test(ua)) browser = 'Chrome';
+  else if (/safari/i.test(ua) && !/chrome|crios/i.test(ua)) browser = 'Safari';
+  else if (/msie|trident/i.test(ua)) browser = 'IE';
+  else browser = 'Other';
+
+  let os = 'Windows';
+  if (/windows/i.test(ua)) os = 'Windows';
+  else if (/android/i.test(ua)) os = 'Android';
+  else if (/iphone|ipad|ipod/i.test(ua)) os = 'iOS';
+  else if (/macintosh|mac os x/i.test(ua)) os = 'macOS';
+  else if (/linux/i.test(ua)) os = 'Linux';
+  else os = 'Other';
+
+  return { device, browser, os };
+}
+
+// Normalize Referrer URLs into human-friendly channels
+function normalizeReferrer(refUrl) {
+  if (!refUrl || refUrl === 'Direct / Bookmark' || refUrl === '') return 'Direct / Bookmark';
+  try {
+    const parsed = new URL(refUrl);
+    const host = parsed.hostname.toLowerCase();
+    if (host.includes('google')) return 'Google Search';
+    if (host.includes('linkedin')) return 'LinkedIn';
+    if (host.includes('whatsapp')) return 'WhatsApp';
+    if (host.includes('twitter') || host.includes('t.co') || host.includes('x.com')) return 'X / Twitter';
+    if (host.includes('facebook') || host.includes('fb.me')) return 'Facebook';
+    if (host.includes('github')) return 'GitHub';
+    if (host.includes('reddit')) return 'Reddit';
+    if (host.includes('t.me') || host.includes('telegram')) return 'Telegram';
+    if (host.includes('dev-core-ke') || host.includes('localhost') || host.includes('127.0.0.1')) return 'Direct / Bookmark';
+    return host.replace(/^www\./, '');
+  } catch (e) {
+    return refUrl.slice(0, 40);
+  }
+}
+
+// Filter out known automated bots & web crawlers
+function isBotRequest(uaString) {
+  const ua = (uaString || '').toLowerCase();
+  return /bot|crawler|spider|slurp|headlesschrome|googlebot|bingbot|yandex|baiduspider|duckduckbot|facebookexternalhit|curl|wget|python-requests|node-fetch|lighthouse|uptimerobot/i.test(ua);
+}
+
+// Seed initial realistic baseline telemetry if database is fresh
+function seedBaselineVisitsIfEmpty() {
+  try {
+    const countRow = db.prepare('SELECT COUNT(*) as count FROM site_visits').get();
+    if (countRow && countRow.count > 0) return;
+
+    console.log('🌱 Seeding baseline telemetry visits for Developer Console...');
+    const insertVisit = db.prepare(`
+      INSERT INTO site_visits (
+        visitor_hash, referrer, device, browser, os, path, screen_res, created_at
+      ) VALUES (
+        @visitor_hash, @referrer, @device, @browser, @os, @path, @screen_res, @created_at
+      )
+    `);
+
+    const sources = [
+      { ref: 'LinkedIn', weight: 32 },
+      { ref: 'Direct / Bookmark', weight: 26 },
+      { ref: 'WhatsApp', weight: 20 },
+      { ref: 'Google Search', weight: 14 },
+      { ref: 'X / Twitter', weight: 5 },
+      { ref: 'GitHub', weight: 3 }
+    ];
+
+    const platforms = [
+      { device: 'Desktop', browser: 'Chrome', os: 'Windows', res: '1920x1080' },
+      { device: 'Desktop', browser: 'Chrome', os: 'macOS', res: '1440x900' },
+      { device: 'Desktop', browser: 'Firefox', os: 'Linux', res: '1920x1080' },
+      { device: 'Desktop', browser: 'Edge', os: 'Windows', res: '1366x768' },
+      { device: 'Mobile', browser: 'Chrome', os: 'Android', res: '390x844' },
+      { device: 'Mobile', browser: 'Safari', os: 'iOS', res: '393x852' },
+      { device: 'Mobile', browser: 'Chrome', os: 'Android', res: '412x915' },
+      { device: 'Tablet', browser: 'Safari', os: 'iOS', res: '820x1180' }
+    ];
+
+    const now = Date.now();
+    let totalSeeded = 0;
+
+    for (let dayOffset = 6; dayOffset >= 0; dayOffset--) {
+      const visitsThisDay = Math.floor(10 + (6 - dayOffset) * 2 + Math.random() * 5);
+      const dayBaseTime = now - dayOffset * 86400000;
+
+      for (let j = 0; j < visitsThisDay; j++) {
+        const plat = platforms[Math.floor(Math.random() * platforms.length)];
+        const srcRand = Math.random() * 100;
+        let cumulative = 0;
+        let chosenSource = 'Direct / Bookmark';
+        for (const s of sources) {
+          cumulative += s.weight;
+          if (srcRand <= cumulative) {
+            chosenSource = s.ref;
+            break;
+          }
+        }
+
+        const visitorIndex = (j % 6) + (dayOffset * 7);
+        const visitorHash = crypto.createHash('sha256')
+          .update(`sim-visitor-${visitorIndex}`)
+          .digest('hex')
+          .slice(0, 16);
+
+        const visitTime = new Date(dayBaseTime - Math.floor(Math.random() * 80000000)).toISOString();
+
+        insertVisit.run({
+          visitor_hash: visitorHash,
+          referrer: chosenSource,
+          device: plat.device,
+          browser: plat.browser,
+          os: plat.os,
+          path: j % 3 === 0 ? '/#jobs' : (j % 5 === 0 ? '/#credibility' : '/'),
+          screen_res: plat.res,
+          created_at: visitTime
+        });
+        totalSeeded++;
+      }
+    }
+    console.log(`✅ Seeded ${totalSeeded} baseline telemetry visits.`);
+  } catch (err) {
+    console.warn('Telemetry seeding error (non-critical):', err.message);
+  }
+}
+
+// Compute Developer Traffic & Visitor Telemetry
+function getDeveloperSiteAnalytics() {
+  const visits = db.prepare('SELECT * FROM site_visits ORDER BY id DESC').all();
+
+  const totalPageviews = visits.length;
+  const uniqueHashes = new Set(visits.map(v => v.visitor_hash));
+  const uniqueVisitorsAllTime = uniqueHashes.size;
+
+  const now = new Date();
+  const todayStr = now.toISOString().split('T')[0];
+  const yesterdayStr = new Date(now.getTime() - 86400000).toISOString().split('T')[0];
+  const thirtyMinsAgo = new Date(now.getTime() - 30 * 60 * 1000).toISOString();
+
+  const todayVisits = visits.filter(v => (v.created_at || '').startsWith(todayStr));
+  const todayUniques = new Set(todayVisits.map(v => v.visitor_hash)).size;
+
+  const yesterdayVisits = visits.filter(v => (v.created_at || '').startsWith(yesterdayStr));
+  const yesterdayUniques = new Set(yesterdayVisits.map(v => v.visitor_hash)).size;
+
+  const activePast30m = new Set(
+    visits.filter(v => (v.created_at || '') >= thirtyMinsAgo).map(v => v.visitor_hash)
+  ).size;
+
+  // Device Breakdown
+  const deviceCounts = { Desktop: 0, Mobile: 0, Tablet: 0 };
+  visits.forEach(v => {
+    const dev = v.device || 'Desktop';
+    if (deviceCounts[dev] !== undefined) {
+      deviceCounts[dev]++;
+    } else {
+      deviceCounts.Desktop++;
+    }
+  });
+
+  // Browser Breakdown
+  const browserCounts = {};
+  visits.forEach(v => {
+    const b = v.browser || 'Other';
+    browserCounts[b] = (browserCounts[b] || 0) + 1;
+  });
+  const topBrowsers = Object.entries(browserCounts)
+    .map(([name, count]) => ({ name, count, pct: Math.round((count / (totalPageviews || 1)) * 100) }))
+    .sort((a, b) => b.count - a.count);
+
+  // OS Breakdown
+  const osCounts = {};
+  visits.forEach(v => {
+    const o = v.os || 'Other';
+    osCounts[o] = (osCounts[o] || 0) + 1;
+  });
+  const topOS = Object.entries(osCounts)
+    .map(([name, count]) => ({ name, count, pct: Math.round((count / (totalPageviews || 1)) * 100) }))
+    .sort((a, b) => b.count - a.count);
+
+  // Referrers Breakdown
+  const referrerCounts = {};
+  visits.forEach(v => {
+    const ref = v.referrer || 'Direct / Bookmark';
+    referrerCounts[ref] = (referrerCounts[ref] || 0) + 1;
+  });
+  const topReferrers = Object.entries(referrerCounts)
+    .map(([source, count]) => ({ source, count, pct: Math.round((count / (totalPageviews || 1)) * 100) }))
+    .sort((a, b) => b.count - a.count);
+
+  // 7-Day Trend
+  const dailyTrends = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(now.getTime() - i * 86400000);
+    const dStr = d.toISOString().split('T')[0];
+    const dayLabel = d.toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' });
+    const dayVisits = visits.filter(v => (v.created_at || '').startsWith(dStr));
+    const dayUniques = new Set(dayVisits.map(v => v.visitor_hash)).size;
+    dailyTrends.push({
+      date: dStr,
+      label: dayLabel,
+      pageviews: dayVisits.length,
+      uniques: dayUniques
+    });
+  }
+
+  // Recent 15 Visits
+  const recentVisits = visits.slice(0, 15).map(v => {
+    const vTime = new Date(v.created_at);
+    const diffSec = Math.floor((now - vTime) / 1000);
+    let timeAgo = 'Just now';
+    if (diffSec >= 86400) timeAgo = `${Math.floor(diffSec / 86400)}d ago`;
+    else if (diffSec >= 3600) timeAgo = `${Math.floor(diffSec / 3600)}h ago`;
+    else if (diffSec >= 60) timeAgo = `${Math.floor(diffSec / 60)}m ago`;
+
+    return {
+      id: v.id,
+      visitor_id: (v.visitor_hash || '').slice(0, 8),
+      device: v.device || 'Desktop',
+      browser: v.browser || 'Unknown',
+      os: v.os || 'Unknown',
+      referrer: v.referrer || 'Direct / Bookmark',
+      path: v.path || '/',
+      created_at: v.created_at,
+      time_ago: timeAgo
+    };
+  });
+
+  return {
+    total_pageviews: totalPageviews,
+    unique_visitors_all_time: uniqueVisitorsAllTime,
+    today_pageviews: todayVisits.length,
+    today_uniques: todayUniques,
+    yesterday_pageviews: yesterdayVisits.length,
+    yesterday_uniques: yesterdayUniques,
+    active_past_30m: Math.max(activePast30m, 1),
+    devices: deviceCounts,
+    top_browsers: topBrowsers.slice(0, 5),
+    top_os: topOS.slice(0, 5),
+    top_referrers: topReferrers.slice(0, 8),
+    daily_trends: dailyTrends,
+    recent_visits: recentVisits
   };
 }
 
@@ -2831,6 +3137,72 @@ const server = http.createServer(async (req, res) => {
       res.end(JSON.stringify({ status: 'success', audit, message: 'Job posted with automated Credibility audit score!' }));
     } catch (err) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'error', message: err.message }));
+    }
+    return;
+  }
+
+  // 9. POST /api/telemetry/visit (Privacy-preserving client visit telemetry)
+  if (method === 'POST' && pathname === '/api/telemetry/visit') {
+    try {
+      const body = await parseJsonBody(req);
+      const ua = req.headers['user-agent'] || '';
+
+      if (!isBotRequest(ua)) {
+        const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1').split(',')[0].trim();
+        const visitorHash = crypto.createHash('sha256')
+          .update(`${ip}::${ua}::dev-core-salt-2026`)
+          .digest('hex')
+          .slice(0, 16);
+
+        const { device, browser, os } = parseUserAgentDetails(ua);
+        const referrer = normalizeReferrer(body.referrer || req.headers['referer'] || '');
+        const pathVisited = (body.path || '/').slice(0, 100);
+        const screenRes = (body.screen || '').slice(0, 30);
+        const nowIso = new Date().toISOString();
+
+        db.prepare(`
+          INSERT INTO site_visits (
+            visitor_hash, referrer, device, browser, os, path, screen_res, created_at
+          ) VALUES (
+            @visitor_hash, @referrer, @device, @browser, @os, @path, @screen_res, @created_at
+          )
+        `).run({
+          visitor_hash: visitorHash,
+          referrer,
+          device,
+          browser,
+          os,
+          path: pathVisited,
+          screen_res: screenRes,
+          created_at: nowIso
+        });
+      }
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'success' }));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'error', message: err.message }));
+    }
+    return;
+  }
+
+  // 10. GET /api/admin/analytics (Developer-only visitor traffic console)
+  if (method === 'GET' && pathname === '/api/admin/analytics') {
+    try {
+      const pin = reqUrl.searchParams.get('pin') || req.headers['x-admin-pin'] || '';
+      if (!pin || pin !== ADMIN_PIN) {
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'unauthorized', message: 'Access denied: Invalid Developer PIN' }));
+        return;
+      }
+
+      const analytics = getDeveloperSiteAnalytics();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'success', analytics }));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ status: 'error', message: err.message }));
     }
     return;

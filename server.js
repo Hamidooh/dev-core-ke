@@ -287,11 +287,93 @@ function initDatabase() {
     );
   `);
 
-  // Seed default data if table is empty
+  // Synchronize all verified positions on startup
+  syncDatabaseRoles();
+}
+
+function syncDatabaseRoles() {
   const countRow = db.prepare('SELECT COUNT(*) as count FROM jobs').get();
-  if (countRow.count === 0) {
+  if (!countRow || countRow.count === 0) {
     seedDatabase();
   }
+
+  // Ensure ALL roles from devcircle_data.json are synchronized into the database
+  if (fs.existsSync(DB_JSON_FILE)) {
+    try {
+      const data = JSON.parse(fs.readFileSync(DB_JSON_FILE, 'utf8'));
+      if (Array.isArray(data.jobs) && data.jobs.length > 0) {
+        const checkExists = db.prepare(`
+          SELECT id FROM jobs 
+          WHERE (LOWER(title) = LOWER(@title) AND LOWER(company) = LOWER(@company))
+             OR (@apply_url != '' AND apply_url = @apply_url)
+          LIMIT 1
+        `);
+
+        const insertJob = db.prepare(`
+          INSERT INTO jobs (
+            title, company, company_domain, location, location_type, seniority, domain,
+            salary_kes_min, salary_kes_max, salary_usd_min, salary_usd_max, currency_display,
+            description, requirements, benefits, credibility_score, brs_verified, scam_risk,
+            apply_url, contact_email, remote_accessible_kenya, posted_date, tags
+          ) VALUES (
+            @title, @company, @company_domain, @location, @location_type, @seniority, @domain,
+            @salary_kes_min, @salary_kes_max, @salary_usd_min, @salary_usd_max, @currency_display,
+            @description, @requirements, @benefits, @credibility_score, @brs_verified, @scam_risk,
+            @apply_url, @contact_email, @remote_accessible_kenya, @posted_date, @tags
+          )
+        `);
+
+        let inserted = 0;
+        for (const job of data.jobs) {
+          const exists = checkExists.get({
+            title: (job.title || '').trim(),
+            company: (job.company || '').trim(),
+            apply_url: (job.apply_url || '').trim()
+          });
+          if (!exists) {
+            const { id, ...jobData } = job;
+            insertJob.run(jobData);
+            inserted++;
+          }
+        }
+        if (inserted > 0) {
+          console.log(`✅ Synchronized database: Ingested ${inserted} missing verified roles into active database.`);
+        }
+      }
+
+      if (Array.isArray(data.reviews) && data.reviews.length > 0) {
+        const checkReview = db.prepare(`
+          SELECT id FROM reviews 
+          WHERE LOWER(company_name) = LOWER(@company_name) AND LOWER(role) = LOWER(@role)
+          LIMIT 1
+        `);
+        const insertReview = db.prepare(`
+          INSERT INTO reviews (
+            company_name, role, seniority, rating, culture_rating, salary_rating, management_rating,
+            timely_pay_mpesa_bank, pros, cons, interview_experience, verified_dev, created_at
+          ) VALUES (
+            @company_name, @role, @seniority, @rating, @culture_rating, @salary_rating, @management_rating,
+            @timely_pay_mpesa_bank, @pros, @cons, @interview_experience, @verified_dev, @created_at
+          )
+        `);
+        for (const rev of data.reviews) {
+          const exists = checkReview.get({
+            company_name: (rev.company_name || '').trim(),
+            role: (rev.role || '').trim()
+          });
+          if (!exists) {
+            const { id, ...revData } = rev;
+            insertReview.run(revData);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Sync database error:', e.message);
+    }
+  }
+
+  const finalCount = db.prepare('SELECT COUNT(*) as count FROM jobs').get();
+  console.log(`📊 Total Active Verified Positions in Database: ${finalCount ? finalCount.count : 0}`);
 }
 
 function seedDatabase() {
@@ -1105,7 +1187,7 @@ function estimateSalaries(seniority, domain) {
 
 // Fetch Remote Software Developer roles from Remotive public API
 async function fetchRemotiveJobs() {
-  const url = 'https://remotive.com/api/remote-jobs?category=software-dev&limit=15';
+  const url = 'https://remotive.com/api/remote-jobs?category=software-dev&limit=40';
   const response = await fetch(url, { signal: AbortSignal.timeout(6500) });
   if (!response.ok) throw new Error(`Remotive HTTP status ${response.status}`);
   const data = await response.json();
@@ -1144,7 +1226,7 @@ async function fetchRemotiveJobs() {
 
 // Fetch Remote Engineering roles from Jobicy public API
 async function fetchJobicyJobs() {
-  const url = 'https://jobicy.com/api/v2/remote-jobs?count=10&industry=engineering';
+  const url = 'https://jobicy.com/api/v2/remote-jobs?count=30&industry=engineering';
   const response = await fetch(url, { signal: AbortSignal.timeout(6500) });
   if (!response.ok) throw new Error(`Jobicy HTTP status ${response.status}`);
   const data = await response.json();
@@ -1198,7 +1280,7 @@ async function fetchArbeitnowJobs() {
            text.includes('frontend') || text.includes('backend') || text.includes('fullstack') || 
            text.includes('devops') || text.includes('cloud') || text.includes('data') || 
            text.includes('python') || text.includes('javascript') || text.includes('react') || text.includes('security');
-  }).slice(0, 30);
+  }).slice(0, 75);
 
   return softwareJobs.map(item => {
     const title = item.title || 'Software Developer';
@@ -1251,7 +1333,7 @@ async function fetchRemoteOKJobs() {
            text.includes('frontend') || text.includes('backend') || text.includes('fullstack') || 
            text.includes('devops') || text.includes('cloud') || text.includes('data') || 
            text.includes('react') || text.includes('node') || text.includes('golang') || text.includes('python');
-  }).slice(0, 25);
+  }).slice(0, 60);
 
   return devJobs.map(item => {
     const title = item.position || 'Remote Software Engineer';
@@ -1501,6 +1583,216 @@ function fetchLinkedInTrackedJobs() {
       contact_email: "ilabafrica@strathmore.edu",
       posted_date: today,
       tags: "LinkedIn,Attachment,Strathmore,AI,Python,Students"
+    },
+    {
+      title: "Senior Cloud Platform Security Architect",
+      company: "Safaricom PLC",
+      company_domain: "linkedin.com/company/safaricom-plc",
+      location: "Nairobi (HQ Westlands / Hybrid)",
+      location_type: "Hybrid",
+      seniority: "senior",
+      domain: "cybersecurity",
+      salary_kes_min: 520000,
+      salary_kes_max: 820000,
+      salary_usd_min: 4000,
+      salary_usd_max: 6400,
+      currency_display: "KES",
+      description: "Define zero-trust cybersecurity architecture across Safaricom cloud platforms, M-Pesa core infrastructures, and 5G edge networks. Ensure compliance with CBK, ISO27001, and Data Protection Act.",
+      requirements: "6+ years in cloud security; CISSP/CISM; AWS/Azure security specialties, Kubernetes RBAC, HashiCorp Vault, vulnerability remediation.",
+      benefits: "Executive health cover, low-interest mortgage, Safaricom data/airtime benefits, annual performance incentive.",
+      apply_url: "https://www.linkedin.com/company/safaricom-plc/jobs/",
+      contact_email: "careers@safaricom.co.ke",
+      posted_date: today,
+      tags: "LinkedIn,Safaricom,Security,Cloud,CISSP"
+    },
+    {
+      title: "AI Copilot & Large Language Model Research Engineer",
+      company: "Microsoft Africa Development Centre (ADC)",
+      company_domain: "linkedin.com/company/microsoft",
+      location: "Nairobi (Dunhill Towers, Westlands)",
+      location_type: "Kenya Local",
+      seniority: "senior",
+      domain: "ai_ml_data",
+      salary_kes_min: 600000,
+      salary_kes_max: 950000,
+      salary_usd_min: 4700,
+      salary_usd_max: 7400,
+      currency_display: "KES",
+      description: "Research and deploy multilingual NLP and generative AI models tailored for African languages and emerging markets. Work directly with Microsoft AI teams globally.",
+      requirements: "5+ years in ML/AI research or production systems; PyTorch, Transformer architectures, Fine-tuning LLMs, Vector DBs (Qdrant, Pinecone); Python, C++.",
+      benefits: "Microsoft Stock awards (RSUs), comprehensive family medical, education reimbursement, international travel.",
+      apply_url: "https://www.linkedin.com/company/microsoft/jobs/",
+      contact_email: "adcnairobi@microsoft.com",
+      posted_date: today,
+      tags: "LinkedIn,Microsoft,ADC,AI,LLM,Python"
+    },
+    {
+      title: "Android Developer Relations Engineer (Sub-Saharan Africa)",
+      company: "Google Kenya",
+      company_domain: "linkedin.com/company/google",
+      location: "Nairobi (Google Office / Hybrid)",
+      location_type: "Hybrid",
+      seniority: "mid",
+      domain: "mobile",
+      salary_kes_min: 450000,
+      salary_kes_max: 700000,
+      salary_usd_min: 3500,
+      salary_usd_max: 5500,
+      currency_display: "KES",
+      description: "Partner with developer communities, startups, and enterprises across Africa to architect high-performance Android experiences optimized for Next Billion Users (NBU).",
+      requirements: "3+ years Android engineering with Kotlin, Jetpack Compose; Public speaking or technical documentation experience; Passion for developer ecosystem growth.",
+      benefits: "Google equity (GSUs), world-class health insurance, gourmet food on campus, continuous learning budget.",
+      apply_url: "https://www.linkedin.com/company/google/jobs/",
+      contact_email: "careers@google.com",
+      posted_date: today,
+      tags: "LinkedIn,Google,Android,Kotlin,DevRel,Nairobi"
+    },
+    {
+      title: "Associate Cloud Solutions Architect (FinTech & Banking)",
+      company: "Amazon Web Services (AWS)",
+      company_domain: "linkedin.com/company/amazon-web-services",
+      location: "Nairobi (AWS Office / Hybrid)",
+      location_type: "Hybrid",
+      seniority: "mid",
+      domain: "devops_cloud",
+      salary_kes_min: 420000,
+      salary_kes_max: 680000,
+      salary_usd_min: 3300,
+      salary_usd_max: 5300,
+      currency_display: "KES",
+      description: "Guide leading African banks, payment switches, and fintech unicorns in migrating critical workloads to AWS cloud with high resilience, compliance, and disaster recovery.",
+      requirements: "3+ years software architecture or DevOps; AWS Certified Solutions Architect; Hands-on proficiency with Terraform, ECS/EKS, Serverless Lambda.",
+      benefits: "Amazon RSUs, comprehensive healthcare, cell phone and home internet reimbursement, executive training.",
+      apply_url: "https://www.linkedin.com/company/amazon-web-services/jobs/",
+      contact_email: "aws-kenya-hiring@amazon.com",
+      posted_date: today,
+      tags: "LinkedIn,AWS,Cloud,SolutionsArchitect,Fintech"
+    },
+    {
+      title: "Lead Mobile Applications Engineer (iOS & Android)",
+      company: "NCBA Group",
+      company_domain: "linkedin.com/company/ncba-group",
+      location: "Nairobi (NCBA Centre, Upper Hill)",
+      location_type: "Kenya Local",
+      seniority: "lead_manager",
+      domain: "mobile",
+      salary_kes_min: 480000,
+      salary_kes_max: 760000,
+      salary_usd_min: 3800,
+      salary_usd_max: 6000,
+      currency_display: "KES",
+      description: "Direct mobile engineering squads building NCBA Loop and mobile banking applications serving retail and corporate customers across East Africa.",
+      requirements: "6+ years mobile development experience (Swift, Kotlin, or Flutter); Micro-frontend mobile architectures; Biometrics security, CI/CD pipeline automation.",
+      benefits: "Competitive banking remuneration, staff mortgage scheme, comprehensive medical cover, bonus scheme.",
+      apply_url: "https://www.linkedin.com/company/ncba-group/jobs/",
+      contact_email: "jobs@ncbagroup.com",
+      posted_date: today,
+      tags: "LinkedIn,NCBA,Mobile,Flutter,Fintech,Kenya"
+    },
+    {
+      title: "Enterprise Payments API & Open Banking Architect",
+      company: "KCB Group",
+      company_domain: "linkedin.com/company/kcb-group",
+      location: "Nairobi (Kencom House / CBD)",
+      location_type: "Kenya Local",
+      seniority: "senior",
+      domain: "backend",
+      salary_kes_min: 500000,
+      salary_kes_max: 800000,
+      salary_usd_min: 3900,
+      salary_usd_max: 6250,
+      currency_display: "KES",
+      description: "Architect open banking integration APIs, merchant settlement engines, and cross-border remittance switches across 7 East African subsidiaries.",
+      requirements: "5+ years backend systems engineering in Java (Spring Boot) or Go; Apache Kafka, API Gateway (Kong/Apigee), ISO 20022 message formats.",
+      benefits: "Executive banking package, subsidized loans, pension fund, medical insurance.",
+      apply_url: "https://www.linkedin.com/company/kcb-group/jobs/",
+      contact_email: "recruitment@kcbgroup.com",
+      posted_date: today,
+      tags: "LinkedIn,KCB,Banking,APIs,Spring,Kafka"
+    },
+    {
+      title: "Senior Fullstack Engineer (React, TypeScript & Node.js)",
+      company: "Andela Kenya",
+      company_domain: "linkedin.com/company/andela",
+      location: "Worldwide Remote (Kenya Base)",
+      location_type: "Worldwide Remote",
+      seniority: "senior",
+      domain: "fullstack",
+      salary_kes_min: 650000,
+      salary_kes_max: 1050000,
+      salary_usd_min: 5100,
+      salary_usd_max: 8200,
+      currency_display: "USD",
+      description: "Join Andela's global network matching top Kenyan technologists with elite US/European engineering organizations. Work on mission-critical SaaS applications.",
+      requirements: "5+ years in modern fullstack web development; React, TypeScript, Node.js, GraphQL, PostgreSQL; Strong asynchronous collaboration skills.",
+      benefits: "USD compensation paid reliably, home office setup budget, health insurance, flexible paid time off.",
+      apply_url: "https://www.linkedin.com/company/andela/jobs/",
+      contact_email: "careers@andela.com",
+      posted_date: today,
+      tags: "LinkedIn,Andela,Fullstack,React,TypeScript,USD"
+    },
+    {
+      title: "Tingg Core Payment Switch Reliability Engineer",
+      company: "Cellulant",
+      company_domain: "linkedin.com/company/cellulant",
+      location: "Nairobi (HQ / Hybrid)",
+      location_type: "Hybrid",
+      seniority: "mid",
+      domain: "backend",
+      salary_kes_min: 260000,
+      salary_kes_max: 420000,
+      salary_usd_min: 2000,
+      salary_usd_max: 3300,
+      currency_display: "KES",
+      description: "Maintain and optimize Cellulant's Tingg payments switch processing transactions across 35 African countries. Ensure 99.99% transaction reliability and low latency.",
+      requirements: "3+ years backend development with Java or PHP/Laravel; MySQL, Redis, RabbitMQ; Experience in transaction authorization and reconciliation.",
+      benefits: "Comprehensive healthcare, professional certification sponsorship, hybrid work policy.",
+      apply_url: "https://www.linkedin.com/company/cellulant/jobs/",
+      contact_email: "jobs@cellulant.io",
+      posted_date: today,
+      tags: "LinkedIn,Cellulant,Tingg,Fintech,Java,Nairobi"
+    },
+    {
+      title: "Senior Backend Go Engineer - Supply Chain & Logistics",
+      company: "Wasoko",
+      company_domain: "linkedin.com/company/wasoko",
+      location: "Nairobi (Innovation Hub)",
+      location_type: "Kenya Local",
+      seniority: "senior",
+      domain: "backend",
+      salary_kes_min: 400000,
+      salary_kes_max: 650000,
+      salary_usd_min: 3100,
+      salary_usd_max: 5100,
+      currency_display: "KES",
+      description: "Build distributed logistics routing algorithms, warehouse stock forecasting models, and B2B checkout solutions empowering informal retailers across Africa.",
+      requirements: "5+ years Go (Golang) development; Distributed architectures, Docker, Kubernetes, PostgreSQL, PostGIS spatial queries.",
+      benefits: "Equity participation, wellness allowance, top-spec MacBook Pro, international team environment.",
+      apply_url: "https://www.linkedin.com/company/wasoko/jobs/",
+      contact_email: "careers@wasoko.com",
+      posted_date: today,
+      tags: "LinkedIn,Wasoko,Go,Logistics,Backend,Kenya"
+    },
+    {
+      title: "Technical Lead & Senior Software Engineering Instructor",
+      company: "Moringa School",
+      company_domain: "linkedin.com/company/moringa-school",
+      location: "Nairobi (Kilimani / Hybrid)",
+      location_type: "Hybrid",
+      seniority: "lead_manager",
+      domain: "fullstack",
+      salary_kes_min: 280000,
+      salary_kes_max: 450000,
+      salary_usd_min: 2200,
+      salary_usd_max: 3500,
+      currency_display: "KES",
+      description: "Mentor and lead curriculum development for cohorts of aspiring Kenyan software engineers. Teach React, Python/Flask, algorithms, and industry-standard CI/CD practices.",
+      requirements: "4+ years software development experience; Deep passion for tech education and mentorship; Excellent interpersonal and code review skills.",
+      benefits: "Medical insurance, flexible schedule, continuous learning budget, high-impact community role.",
+      apply_url: "https://www.linkedin.com/company/moringa-school/jobs/",
+      contact_email: "careers@moringaschool.com",
+      posted_date: today,
+      tags: "LinkedIn,MoringaSchool,Education,React,Python,Mentorship"
     }
   ];
 }
@@ -1718,6 +2010,216 @@ function fetchKenyanEcosystemJobs() {
       contact_email: "recruitment@canonical.com",
       posted_date: today,
       tags: "Canonical,Ubuntu,DevOps,Linux,Kubernetes"
+    },
+    {
+      title: "FinTech Regulatory Sandbox & API Compliance Engineer",
+      company: "Central Bank of Kenya (CBK)",
+      company_domain: "centralbank.go.ke",
+      location: "Nairobi (Haile Selassie Ave)",
+      location_type: "Kenya Local",
+      seniority: "senior",
+      domain: "cybersecurity",
+      salary_kes_min: 450000,
+      salary_kes_max: 720000,
+      salary_usd_min: 3500,
+      salary_usd_max: 5600,
+      currency_display: "KES",
+      description: "Evaluate, audit, and benchmark emerging FinTech payment architectures, open banking protocols, and cryptocurrency/CBDC sandbox pilots against national cybersecurity frameworks.",
+      requirements: "5+ years software engineering and financial compliance; Knowledge of ISO20022, PCI-DSS, zero-trust cryptographic frameworks, Go or Java.",
+      benefits: "Public sector banking benefits, civil service medical scheme, research sabbatical support.",
+      apply_url: "https://www.centralbank.go.ke/careers",
+      contact_email: "recruitment@centralbank.go.ke",
+      posted_date: today,
+      tags: "CBK,Fintech,Compliance,Security,Banking,Nairobi"
+    },
+    {
+      title: "Aviation Digital Platforms & Flight Booking Fullstack Engineer",
+      company: "Kenya Airways (KQ)",
+      company_domain: "kenya-airways.com",
+      location: "Nairobi (Embakasi HQ / Hybrid)",
+      location_type: "Hybrid",
+      seniority: "mid",
+      domain: "fullstack",
+      salary_kes_min: 240000,
+      salary_kes_max: 380000,
+      salary_usd_min: 1900,
+      salary_usd_max: 3000,
+      currency_display: "KES",
+      description: "Build flight reservations interfaces, automated boarding pass integrations, and loyalty program portals. Work with Amadeus GDS APIs, React, and Spring Boot microservices.",
+      requirements: "3+ years fullstack development; React, TypeScript, Java/Spring Boot; REST/SOAP APIs; High reliability fault tolerance.",
+      benefits: "Rebate airline tickets for employee and family, comprehensive healthcare, pension fund.",
+      apply_url: "https://www.kenya-airways.com/en/about-us/careers/",
+      contact_email: "careers@kenya-airways.com",
+      posted_date: today,
+      tags: "KenyaAirways,Aviation,Fullstack,React,Java"
+    },
+    {
+      title: "IoT Embedded Systems & Telemetry Firmware Engineer",
+      company: "Sanergy / Fresh Life",
+      company_domain: "freshlife.com",
+      location: "Nairobi (Sameer Business Park / Industrial Area)",
+      location_type: "Kenya Local",
+      seniority: "mid",
+      domain: "embedded_systems",
+      salary_kes_min: 200000,
+      salary_kes_max: 320000,
+      salary_usd_min: 1600,
+      salary_usd_max: 2500,
+      currency_display: "KES",
+      description: "Design low-power IoT sensor networks, GSM telemetry modules, and embedded firmware monitoring municipal sanitation assets across informal urban settlements in Nairobi.",
+      requirements: "3+ years embedded C/C++ development; ESP32, STM32, FreeRTOS; Cellular IoT (NB-IoT/LTE-M), MQTT protocols; PCB design familiarity.",
+      benefits: "Comprehensive medical cover, impact-driven mission, collaborative R&D workshop.",
+      apply_url: "https://freshlife.com/careers",
+      contact_email: "careers@saner.gy",
+      posted_date: today,
+      tags: "IoT,Embedded,C++,ESP32,Sanergy,Nairobi"
+    },
+    {
+      title: "Logistics Optimization & Route Planning Software Engineer",
+      company: "Copia Kenya",
+      company_domain: "copia.co.ke",
+      location: "Nairobi (Tatu City Industrial Park)",
+      location_type: "Hybrid",
+      seniority: "mid",
+      domain: "backend",
+      salary_kes_min: 220000,
+      salary_kes_max: 350000,
+      salary_usd_min: 1700,
+      salary_usd_max: 2750,
+      currency_display: "KES",
+      description: "Engineer route optimization algorithms, driver dispatch mobile integrations, and mid-mile logistics platforms servicing rural and peri-urban retail agents across Kenya.",
+      requirements: "3+ years Python (Django/FastAPI) or Node.js; PostGIS geospatial querying, Docker, Redis; Experience in supply chain or delivery logistics.",
+      benefits: "Company transport shuttle, medical insurance, staff purchase discounts, flexible hybrid days.",
+      apply_url: "https://copia.co.ke/careers",
+      contact_email: "recruitment@copia.co.ke",
+      posted_date: today,
+      tags: "Copia,Logistics,Python,PostGIS,ECommerce"
+    },
+    {
+      title: "Machine Learning Credit Risk Modeling Engineer",
+      company: "Branch International",
+      company_domain: "branch.co",
+      location: "Worldwide Remote (Kenya Accessible)",
+      location_type: "Worldwide Remote",
+      seniority: "senior",
+      domain: "ai_ml_data",
+      salary_kes_min: 550000,
+      salary_kes_max: 880000,
+      salary_usd_min: 4300,
+      salary_usd_max: 6900,
+      currency_display: "USD",
+      description: "Design and train automated credit underwriting models processing non-traditional telemetry data for millions of mobile borrowers across emerging markets.",
+      requirements: "5+ years ML engineering with Python (Scikit-Learn, XGBoost, LightGBM, PyTorch); MLOps pipelines (MLflow, Airflow); High security financial data handling.",
+      benefits: "USD compensation via international contractor agreement, equity options, equipment budget, wellness stipend.",
+      apply_url: "https://branch.co/careers",
+      contact_email: "kenya-jobs@branch.co",
+      posted_date: today,
+      tags: "Branch,Fintech,ML,Python,Remote,USD"
+    },
+    {
+      title: "Embedded Systems & Robotics Student Trainee (Attachment 2026)",
+      company: "JKUAT Innovation & Prototyping Hub",
+      company_domain: "jkuat.ac.ke",
+      location: "Juja (Main Campus)",
+      location_type: "Kenya Local",
+      seniority: "attachment",
+      domain: "embedded_systems",
+      salary_kes_min: 20000,
+      salary_kes_max: 30000,
+      salary_usd_min: 160,
+      salary_usd_max: 240,
+      currency_display: "KES",
+      description: "Hands-on industrial attachment for university engineering and CS students. Build sensor nodes, solar telemetry prototypes, and microcontroller firmwares under faculty mentorship.",
+      requirements: "Continuing student in Mechatronics, CS, or Electrical Engineering; Valid university attachment letter; Basic C/C++ or Arduino/Raspberry Pi prototyping.",
+      benefits: "NITA certified industrial logbook endorsement, laboratory access, monthly stipend.",
+      apply_url: "https://jkuat.ac.ke/careers",
+      contact_email: "innovation@jkuat.ac.ke",
+      posted_date: today,
+      tags: "Attachment,JKUAT,Embedded,Robotics,Students,NITA"
+    },
+    {
+      title: "Digital Core Banking Microservices Specialist",
+      company: "Co-operative Bank of Kenya",
+      company_domain: "co-opbank.co.ke",
+      location: "Nairobi (Haile Selassie HQ)",
+      location_type: "Kenya Local",
+      seniority: "mid",
+      domain: "backend",
+      salary_kes_min: 250000,
+      salary_kes_max: 400000,
+      salary_usd_min: 1950,
+      salary_usd_max: 3100,
+      currency_display: "KES",
+      description: "Develop resilient banking microservices connecting MCo-op Cash mobile wallets with core banking ledgers. Implement zero-downtime database migrations and automated transaction integrity reconciliation.",
+      requirements: "3+ years Java (Spring Boot) or C# .NET Core; Oracle/SQL Server, RabbitMQ/Kafka, Microservices design patterns, Docker.",
+      benefits: "Subsidized staff loans, comprehensive banking medical plan, pension contribution, annual performance bonus.",
+      apply_url: "https://www.co-opbank.co.ke/careers",
+      contact_email: "careers@co-opbank.co.ke",
+      posted_date: today,
+      tags: "CoopBank,Banking,Java,SpringBoot,Microservices"
+    },
+    {
+      title: "Cloud DevOps & Kubernetes Integration Engineer",
+      company: "Stanbic Bank Kenya",
+      company_domain: "stanbicbank.co.ke",
+      location: "Nairobi (Stanbic Centre, Chiromo)",
+      location_type: "Kenya Local",
+      seniority: "senior",
+      domain: "devops_cloud",
+      salary_kes_min: 480000,
+      salary_kes_max: 750000,
+      salary_usd_min: 3750,
+      salary_usd_max: 5850,
+      currency_display: "KES",
+      description: "Orchestrate multi-cluster Kubernetes deployments on Azure and AWS for Stanbic digital channels across Kenya and South Sudan. Maintain GitOps pipelines (ArgoCD) and Prometheus telemetry.",
+      requirements: "5+ years in DevOps; Certified Kubernetes Administrator (CKA); Terraform, ArgoCD, Helm, Azure DevOps; Incident management.",
+      benefits: "Executive medical cover, low-interest mortgage, continuous training sponsorship, performance bonus.",
+      apply_url: "https://www.stanbicbank.co.ke/careers",
+      contact_email: "recruitment@stanbic.com",
+      posted_date: today,
+      tags: "Stanbic,DevOps,Kubernetes,Azure,GitOps"
+    },
+    {
+      title: "Software Engineering & Cloud Architecture Trainee",
+      company: "Presidential Digital Talent Programme (PDTP - ICT Authority)",
+      company_domain: "icta.go.ke",
+      location: "Nairobi / Remote Kenya",
+      location_type: "Kenya Local",
+      seniority: "internship",
+      domain: "fullstack",
+      salary_kes_min: 50000,
+      salary_kes_max: 70000,
+      salary_usd_min: 400,
+      salary_usd_max: 550,
+      currency_display: "KES",
+      description: "Flagship Kenyan national ICT internship cohort. Deployed across government ministries and private multinational tech hubs building citizen service portals (eCitizen, digital IDs, health registries).",
+      requirements: "Recent graduate (within last 2 years) in CS, Software Engineering or related; Good foundation in web development, databases, and problem-solving.",
+      benefits: "Monthly government stipend, high-impact public service placement, national certification, mentoring by senior ICT directors.",
+      apply_url: "https://digitalent.go.ke",
+      contact_email: "pdtp@ict.go.ke",
+      posted_date: today,
+      tags: "PDTP,ICTAuthority,Internship,eCitizen,Kenya"
+    },
+    {
+      title: "iTax & eTIMS Microservices Backend Trainee",
+      company: "Kenya Revenue Authority (KRA)",
+      company_domain: "kra.go.ke",
+      location: "Nairobi (Times Tower / Haile Selassie)",
+      location_type: "Kenya Local",
+      seniority: "internship",
+      domain: "backend",
+      salary_kes_min: 45000,
+      salary_kes_max: 65000,
+      salary_usd_min: 350,
+      salary_usd_max: 500,
+      currency_display: "KES",
+      description: "Join KRA's digital transformation engineering team. Assist in developing eTIMS API integrations, electronic invoicing endpoints, and high-throughput tax ledger audit microservices.",
+      requirements: "Recent graduate or final year student in CS/IT; Understanding of REST APIs, JSON validation, relational databases (PostgreSQL/Oracle), Git.",
+      benefits: "Official government trainee stipend, comprehensive exposure to national-scale financial systems, training certificate.",
+      apply_url: "https://erecruitment.kra.go.ke",
+      contact_email: "recruitment@kra.go.ke",
+      posted_date: today,
+      tags: "KRA,eTIMS,Backend,APIs,Internship,Nairobi"
     }
   ];
 }
@@ -1885,6 +2387,24 @@ async function runHourlyRoleScan(isManual = false) {
     status,
     message: logMessage
   });
+
+  if (addedCount > 0) {
+    try {
+      const allJobs = db.prepare('SELECT * FROM jobs').all();
+      const allReviews = db.prepare('SELECT * FROM reviews').all();
+      const allAudits = db.prepare('SELECT * FROM credibility_audits').all();
+      const allLogs = db.prepare('SELECT * FROM scanner_logs').all();
+      fs.writeFileSync(DB_JSON_FILE, JSON.stringify({
+        jobs: allJobs,
+        reviews: allReviews,
+        credibility_audits: allAudits,
+        scanner_logs: allLogs
+      }, null, 2), 'utf8');
+      console.log(`[Scanner] 💾 Saved ${allJobs.length} roles to ${DB_JSON_FILE}`);
+    } catch (err) {
+      console.error('[Scanner] Failed to persist data to JSON:', err.message);
+    }
+  }
 
   scannerState.isScanning = false;
   scannerState.lastScanTime = scanTimeIso;

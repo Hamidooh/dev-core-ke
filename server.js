@@ -2814,6 +2814,18 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`=======================================================`);
 });
 
+// Dual-listener: if PORT != 3000 (e.g. Render assigns PORT=10000), also listen on 3000 for Docker EXPOSE 3000 routing
+if (Number(PORT) !== 3000) {
+  try {
+    const secondaryServer = http.createServer((req, res) => server.emit('request', req, res));
+    secondaryServer.listen(3000, '0.0.0.0', () => {
+      console.log('📡 Dual-listen active on port 3000');
+    });
+  } catch (e) {
+    // Port 3000 in use
+  }
+}
+
 // Schedule Autonomous Hourly Role Scanner (every 60 minutes)
 setInterval(() => {
   runHourlyRoleScan(false).catch(err => console.error('[Hourly Scanner Exception]', err));

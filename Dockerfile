@@ -2,13 +2,9 @@ FROM node:22-alpine
 
 WORKDIR /app
 
-COPY package*.json ./
-RUN npm install --omit=dev || true
-
 COPY . .
 
+ENV PORT=3000
 EXPOSE 3000
 
-ENV PORT=3000
-
-CMD ["node", "--experimental-sqlite", "server.js"]
+CMD ["sh", "-c", "node --experimental-sqlite server.js || node server.js"]

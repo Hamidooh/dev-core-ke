@@ -42,8 +42,31 @@ function switchTab(tabName) {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
+// Update dynamic LinkedIn Live Search URL based on filters
+function updateLinkedInSearchUrl() {
+  const q = document.getElementById('filter-search')?.value.trim() || '';
+  const seniority = document.getElementById('filter-seniority')?.value || 'all';
+  const loc = document.getElementById('filter-location')?.value || 'all';
+
+  let term = q || 'Software Engineer';
+  if (seniority && seniority !== 'all') {
+    term += ` ${seniority}`;
+  }
+
+  let targetUrl = '';
+  if (loc === 'Worldwide Remote') {
+    targetUrl = `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(term)}&f_WT=2`;
+  } else {
+    targetUrl = `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(term)}&location=Kenya`;
+  }
+
+  const btn = document.getElementById('btn-linkedin-live-search');
+  if (btn) btn.href = targetUrl;
+}
+
 // Debounce for search
 function handleSearchDebounced() {
+  updateLinkedInSearchUrl();
   clearTimeout(searchDebounceTimer);
   searchDebounceTimer = setTimeout(() => {
     loadJobs();
@@ -53,6 +76,7 @@ function handleSearchDebounced() {
 // Quick filter helpers
 function quickFilterSeniority(val) {
   document.getElementById('filter-seniority').value = val;
+  updateLinkedInSearchUrl();
   loadJobs();
 }
 
@@ -274,6 +298,7 @@ function renderJobCard(job) {
   const tags = (job.tags || '').split(',').filter(Boolean);
   const today = new Date().toISOString().split('T')[0];
   const isToday = job.posted_date === today;
+  const isLinkedIn = (job.tags || '').includes('LinkedIn') || (job.company_domain || '').includes('linkedin') || (job.apply_url || '').includes('linkedin.com');
   const applyAction = getApplyLinkData(job);
 
   return `
@@ -299,6 +324,7 @@ function renderJobCard(job) {
           <span class="font-bold text-slate-900 flex items-center gap-1">
             <i class="fa-regular fa-building text-slate-600"></i> ${job.company}
           </span>
+          ${isLinkedIn ? '<span class="inline-flex items-center gap-0.5 text-[11px] font-bold text-[#0A66C2] bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded shadow-2xs"><i class="fa-brands fa-linkedin text-[#0A66C2]"></i> LinkedIn</span>' : ''}
           ${job.brs_verified ? '<span class="inline-flex items-center gap-0.5 text-[11px] font-bold text-emerald-800 bg-emerald-100/90 border border-emerald-300 px-1.5 py-0.5 rounded shadow-2xs"><i class="fa-solid fa-circle-check text-emerald-700"></i> BRS Reg</span>' : ''}
           <span class="flex items-center gap-1 text-slate-700 font-medium">
             <i class="fa-solid fa-location-dot text-slate-600"></i> ${job.location}
@@ -329,11 +355,21 @@ function renderJobCard(job) {
         </div>
 
         <div class="flex items-center gap-2">
+          <a 
+            href="https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(job.company + ' ' + job.title)}" 
+            target="_blank" 
+            rel="noopener noreferrer" 
+            class="px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-[#0A66C2] border border-blue-200 font-bold transition inline-flex items-center gap-1 cursor-pointer text-xs"
+            title="Search for this opening and recruiter on LinkedIn"
+          >
+            <i class="fa-brands fa-linkedin"></i>
+            <span class="hidden sm:inline">LinkedIn</span>
+          </a>
           <button 
             onclick="openJobDetail(${job.id})" 
             class="px-3 py-1.5 rounded-lg bg-surface-800 hover:bg-surface-700 text-slate-200 border border-surface-650 font-semibold transition cursor-pointer"
           >
-            Countercheck & Details
+            Details
           </button>
           <a 
             href="${applyAction.href}" 

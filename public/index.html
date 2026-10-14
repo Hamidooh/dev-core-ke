@@ -197,18 +197,31 @@
       <!-- Search and Filter Control Deck -->
       <div class="bg-surface-850 border border-surface-700 rounded-2xl p-5 mb-8 shadow-xl">
         <div class="grid grid-cols-1 md:grid-cols-12 gap-3.5">
-          <!-- Text Search -->
-          <div class="md:col-span-5 relative">
-            <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
-              <i class="fa-solid fa-magnifying-glass"></i>
+          <!-- Text Search + LinkedIn Direct Search -->
+          <div class="md:col-span-5 flex items-center gap-2">
+            <div class="relative flex-1">
+              <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+                <i class="fa-solid fa-magnifying-glass"></i>
+              </div>
+              <input 
+                type="text" 
+                id="filter-search" 
+                placeholder="Search title, tech stack (Python, React, Go, M-Pesa), or company..." 
+                class="w-full pl-10 pr-4 py-2.5 bg-surface-900 border border-surface-700 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-brand-500 transition"
+                oninput="handleSearchDebounced()"
+              >
             </div>
-            <input 
-              type="text" 
-              id="filter-search" 
-              placeholder="Search title, tech stack (Python, React, Go, M-Pesa), or company..." 
-              class="w-full pl-10 pr-4 py-2.5 bg-surface-900 border border-surface-700 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-brand-500 transition"
-              oninput="handleSearchDebounced()"
+            <a 
+              id="btn-linkedin-live-search" 
+              href="https://www.linkedin.com/jobs/search/?keywords=software%20engineer&location=Kenya" 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              class="inline-flex items-center gap-1.5 px-3 py-2.5 bg-[#0A66C2] hover:bg-[#004182] text-white text-xs font-bold rounded-xl transition shadow-sm shrink-0 whitespace-nowrap cursor-pointer"
+              title="Search live public job postings on LinkedIn for Kenya & Worldwide Remote"
             >
+              <i class="fa-brands fa-linkedin text-sm"></i>
+              <span>LinkedIn</span>
+            </a>
           </div>
 
           <!-- Seniority Filter (Attachment -> CTO) -->

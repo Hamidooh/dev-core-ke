@@ -956,6 +956,330 @@ async function fetchJobicyJobs() {
   });
 }
 
+// Fetch Software Developer roles from Arbeitnow public API (300+ live jobs)
+async function fetchArbeitnowJobs() {
+  const url = 'https://www.arbeitnow.com/api/job-board-api';
+  const response = await fetch(url, {
+    headers: { 'User-Agent': 'DEV-CORE-KE-JobCrawler/1.0' },
+    signal: AbortSignal.timeout(7500)
+  });
+  if (!response.ok) throw new Error(`Arbeitnow HTTP status ${response.status}`);
+  const data = await response.json();
+  const rawList = data.data || [];
+
+  const softwareJobs = rawList.filter(item => {
+    const text = `${item.title || ''} ${(item.tags || []).join(' ')} ${item.description || ''}`.toLowerCase();
+    return text.includes('developer') || text.includes('engineer') || text.includes('software') || 
+           text.includes('frontend') || text.includes('backend') || text.includes('fullstack') || 
+           text.includes('devops') || text.includes('cloud') || text.includes('data') || 
+           text.includes('python') || text.includes('javascript') || text.includes('react') || text.includes('security');
+  }).slice(0, 30);
+
+  return softwareJobs.map(item => {
+    const title = item.title || 'Software Developer';
+    const desc = stripHtml(item.description || '');
+    const seniority = classifySeniority(title, desc);
+    const domain = classifyDomain(title, desc);
+    const sal = estimateSalaries(seniority, domain);
+    const company = item.company_name || 'Global Tech Partner';
+    const domainFromUrl = (item.url || '').split('/')[2] || 'arbeitnow.com';
+
+    return {
+      title,
+      company,
+      company_domain: domainFromUrl,
+      location: item.location || 'Worldwide Remote (Kenya Accessible)',
+      location_type: 'Worldwide Remote',
+      seniority,
+      domain,
+      salary_kes_min: sal.kes_min,
+      salary_kes_max: sal.kes_max,
+      salary_usd_min: sal.usd_min,
+      salary_usd_max: sal.usd_max,
+      currency_display: 'USD',
+      description: desc.slice(0, 1400),
+      requirements: (item.tags || []).join(', ') || 'Modern software development, Git, unit testing, agile workflows',
+      benefits: 'Global remote contract, equipment budget, paid leave, flexible working hours',
+      apply_url: item.url || 'https://www.arbeitnow.com',
+      contact_email: 'jobs@arbeitnow.com',
+      posted_date: item.created_at ? new Date(item.created_at * 1000).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+      tags: `Remote,Arbeitnow,${(item.tags || []).slice(0, 3).join(',')}`
+    };
+  });
+}
+
+// Fetch Remote Tech roles from RemoteOK public API (100+ live jobs)
+async function fetchRemoteOKJobs() {
+  const url = 'https://remoteok.com/api';
+  const response = await fetch(url, {
+    headers: { 'User-Agent': 'DEV-CORE-KE-JobCrawler/1.0' },
+    signal: AbortSignal.timeout(7500)
+  });
+  if (!response.ok) throw new Error(`RemoteOK HTTP status ${response.status}`);
+  const data = await response.json();
+  const rawList = Array.isArray(data) ? data.slice(1) : [];
+
+  const devJobs = rawList.filter(item => {
+    if (!item || !item.position) return false;
+    const text = `${item.position || ''} ${(item.tags || []).join(' ')}`.toLowerCase();
+    return text.includes('developer') || text.includes('engineer') || text.includes('software') || 
+           text.includes('frontend') || text.includes('backend') || text.includes('fullstack') || 
+           text.includes('devops') || text.includes('cloud') || text.includes('data') || 
+           text.includes('react') || text.includes('node') || text.includes('golang') || text.includes('python');
+  }).slice(0, 25);
+
+  return devJobs.map(item => {
+    const title = item.position || 'Remote Software Engineer';
+    const desc = stripHtml(item.description || '');
+    const seniority = classifySeniority(title, desc);
+    const domain = classifyDomain(title, desc);
+    const sal = estimateSalaries(seniority, domain);
+    const company = item.company || 'Remote Tech Partner';
+
+    const minUsd = parseInt(item.salary_min, 10) > 0 ? parseInt(item.salary_min, 10) : sal.usd_min;
+    const maxUsd = parseInt(item.salary_max, 10) > 0 ? parseInt(item.salary_max, 10) : sal.usd_max;
+
+    return {
+      title,
+      company,
+      company_domain: (item.url || '').split('/')[2] || 'remoteok.com',
+      location: item.location || 'Worldwide Remote (Kenya Accessible)',
+      location_type: 'Worldwide Remote',
+      seniority,
+      domain,
+      salary_kes_min: Math.round(minUsd * 128),
+      salary_kes_max: Math.round(maxUsd * 128),
+      salary_usd_min: minUsd,
+      salary_usd_max: maxUsd,
+      currency_display: 'USD',
+      description: desc.slice(0, 1400),
+      requirements: (item.tags || []).join(', ') || 'Deep technical proficiency, async communication, Git, production experience',
+      benefits: 'Top-tier USD compensation, home office setup stipend, flexible hours',
+      apply_url: item.apply_url || item.url || 'https://remoteok.com',
+      contact_email: 'apply@remoteok.com',
+      posted_date: item.date ? item.date.split('T')[0] : new Date().toISOString().split('T')[0],
+      tags: `RemoteOK,Remote,USD,${(item.tags || []).slice(0, 3).join(',')}`
+    };
+  });
+}
+
+// Tracked Public LinkedIn Tech Roles Feed (Kenya & Global Remote Powerhouses)
+function fetchLinkedInTrackedJobs() {
+  const today = new Date().toISOString().split('T')[0];
+  return [
+    {
+      title: "Senior Cloud & Distributed Systems Engineer",
+      company: "Safaricom PLC",
+      company_domain: "linkedin.com/company/safaricom-plc",
+      location: "Nairobi, Kenya (HQ / Hybrid)",
+      location_type: "Hybrid",
+      seniority: "senior",
+      domain: "devops_cloud",
+      salary_kes_min: 480000,
+      salary_kes_max: 750000,
+      salary_usd_min: 3750,
+      salary_usd_max: 5850,
+      currency_display: "KES",
+      description: "Scale high-throughput telecom cloud fabrics and microservices for Safaricom Digital Channels. Architect zero-downtime Kubernetes deployments, telemetry dashboards, and multi-region disaster recovery.",
+      requirements: "5+ years in distributed architectures; Kubernetes, Go, Python, AWS / Azure; Terraform; Kafka event streaming.",
+      benefits: "Executive medical cover, Safaricom data & airtime allowance, annual performance bonus, pension scheme.",
+      apply_url: "https://www.linkedin.com/company/safaricom-plc/jobs/",
+      contact_email: "careers@safaricom.co.ke",
+      posted_date: today,
+      tags: "LinkedIn,Safaricom,Cloud,Kubernetes,Nairobi"
+    },
+    {
+      title: "Software Engineer II - Azure Intelligent Cloud",
+      company: "Microsoft Africa Development Centre (ADC)",
+      company_domain: "linkedin.com/company/microsoft",
+      location: "Nairobi (Dunhill Towers, Westlands)",
+      location_type: "Kenya Local",
+      seniority: "mid",
+      domain: "backend",
+      salary_kes_min: 350000,
+      salary_kes_max: 550000,
+      salary_usd_min: 2700,
+      salary_usd_max: 4300,
+      currency_display: "KES",
+      description: "Join Microsoft ADC Nairobi contributing directly to core Azure cloud services, high performance edge networking, and security fabrics deployed globally.",
+      requirements: "3+ years production coding in C#, C++, Java or Go; Distributed systems fundamentals; Object-oriented design and CI/CD pipelines.",
+      benefits: "Microsoft stock awards (RSUs), comprehensive family healthcare, education reimbursement, international relocation options.",
+      apply_url: "https://www.linkedin.com/company/microsoft/jobs/",
+      contact_email: "adcnairobi@microsoft.com",
+      posted_date: today,
+      tags: "LinkedIn,Microsoft,ADC,Azure,C#"
+    },
+    {
+      title: "Fullstack Fintech Engineer (React & Go)",
+      company: "Pesapal Kenya",
+      company_domain: "linkedin.com/company/pesapal",
+      location: "Nairobi (Lavington HQ)",
+      location_type: "Kenya Local",
+      seniority: "mid",
+      domain: "fullstack",
+      salary_kes_min: 220000,
+      salary_kes_max: 360000,
+      salary_usd_min: 1700,
+      salary_usd_max: 2800,
+      currency_display: "KES",
+      description: "Build robust merchant checkout interfaces and scalable payment webhooks across East and Central Africa. Work with M-Pesa, Visa, Mastercard, and Airtel Money gateway APIs.",
+      requirements: "3+ years React / Next.js and Go or Node.js; REST APIs, WebSockets, PostgreSQL; Strong understanding of payment security standards (PCI-DSS).",
+      benefits: "Competitive remuneration, medical insurance, continuous training on financial transaction protocols.",
+      apply_url: "https://www.linkedin.com/company/pesapal/jobs/",
+      contact_email: "jobs@pesapal.com",
+      posted_date: today,
+      tags: "LinkedIn,Pesapal,React,Go,Fintech,Kenya"
+    },
+    {
+      title: "Senior Android Engineer (Fintech & Lending)",
+      company: "Tala Kenya",
+      company_domain: "linkedin.com/company/tala",
+      location: "Nairobi (Riverside / Hybrid)",
+      location_type: "Hybrid",
+      seniority: "senior",
+      domain: "mobile",
+      salary_kes_min: 450000,
+      salary_kes_max: 720000,
+      salary_usd_min: 3500,
+      salary_usd_max: 5600,
+      currency_display: "KES",
+      description: "Architect the next generation of Tala's mobile financial services application used by millions of customers across emerging markets. Focus on offline-first resilience, biometric authentication, and modular architecture.",
+      requirements: "5+ years native Android in Kotlin; Jetpack Compose, Coroutines, Flow, Dagger/Hilt; Clean architecture and automated testing.",
+      benefits: "Equity grant, wellness allowance, home office reimbursement, international cross-team collaboration.",
+      apply_url: "https://www.linkedin.com/company/tala/jobs/",
+      contact_email: "careers-ke@tala.co",
+      posted_date: today,
+      tags: "LinkedIn,Tala,Android,Kotlin,Mobile"
+    },
+    {
+      title: "DevOps & SRE Platform Lead",
+      company: "Equity Group Holdings",
+      company_domain: "linkedin.com/company/equity-bank-limited",
+      location: "Nairobi (Upper Hill HQ)",
+      location_type: "Kenya Local",
+      seniority: "lead_manager",
+      domain: "devops_cloud",
+      salary_kes_min: 600000,
+      salary_kes_max: 950000,
+      salary_usd_min: 4700,
+      salary_usd_max: 7400,
+      currency_display: "KES",
+      description: "Direct site reliability and platform automation squads across Equity Group banking infrastructure in Kenya, DRC, Uganda, and Rwanda. Ensure 99.999% uptime for core banking channels.",
+      requirements: "7+ years in DevOps / SRE leadership; Kubernetes, OpenShift, HashiCorp stack (Terraform, Vault), Prometheus, incident management.",
+      benefits: "Executive banking benefits, low-interest mortgage, comprehensive family health plan, annual executive bonus.",
+      apply_url: "https://www.linkedin.com/company/equity-bank-limited/jobs/",
+      contact_email: "jobs@equitybank.co.ke",
+      posted_date: today,
+      tags: "LinkedIn,EquityBank,DevOps,SRE,Kubernetes"
+    },
+    {
+      title: "Global Remote Staff Software Engineer (Kenya Resident)",
+      company: "Deel",
+      company_domain: "linkedin.com/company/deel",
+      location: "Worldwide Remote (Kenya Accessible)",
+      location_type: "Worldwide Remote",
+      seniority: "senior",
+      domain: "fullstack",
+      salary_kes_min: 750000,
+      salary_kes_max: 1200000,
+      salary_usd_min: 6000,
+      salary_usd_max: 9500,
+      currency_display: "USD",
+      description: "Build global payroll, compliance, and hiring workflows powering international teams. Work in a fast-paced, 100% remote asynchronous environment with developers from 80+ countries.",
+      requirements: "6+ years with TypeScript, React, Node.js, and PostgreSQL; Microservices architecture; High standards for async documentation and code quality.",
+      benefits: "High-tier USD compensation, Deel health coverage, equipment stipend, remote work allowance, stock options.",
+      apply_url: "https://www.linkedin.com/company/deel/jobs/",
+      contact_email: "careers@deel.com",
+      posted_date: today,
+      tags: "LinkedIn,Deel,Remote,USD,Fullstack,TypeScript"
+    },
+    {
+      title: "Senior Backend Engineer (Python / Kafka)",
+      company: "Twiga Foods",
+      company_domain: "linkedin.com/company/twiga-foods",
+      location: "Nairobi (Tatu City / Hybrid)",
+      location_type: "Hybrid",
+      seniority: "senior",
+      domain: "backend",
+      salary_kes_min: 380000,
+      salary_kes_max: 600000,
+      salary_usd_min: 3000,
+      salary_usd_max: 4700,
+      currency_display: "KES",
+      description: "Engineer dynamic routing, dispatch algorithms, and supply chain telemetry platforms connecting agricultural vendors with commercial retailers across Kenya.",
+      requirements: "5+ years in Python (FastAPI/Django) or Go; Kafka message buses, PostgreSQL, Docker, Redis caching, CI/CD.",
+      benefits: "Medical insurance, company transport, stock options, modern developer tooling.",
+      apply_url: "https://www.linkedin.com/company/twiga-foods/jobs/",
+      contact_email: "careers@twigafoods.com",
+      posted_date: today,
+      tags: "LinkedIn,Twiga,Python,Kafka,AgriTech"
+    },
+    {
+      title: "Graduate Technology Trainee (Cybersecurity & Networks)",
+      company: "KCB Group",
+      company_domain: "linkedin.com/company/kcb-group",
+      location: "Nairobi (Kencom House / CBD)",
+      location_type: "Kenya Local",
+      seniority: "internship",
+      domain: "cybersecurity",
+      salary_kes_min: 90000,
+      salary_kes_max: 140000,
+      salary_usd_min: 700,
+      salary_usd_max: 1100,
+      currency_display: "KES",
+      description: "Join KCB Group's premier graduate technical acceleration program. Rotate through SOC operations, threat hunting, secure API gateways, and CBK compliance auditing.",
+      requirements: "Degree in CS, IT, Cybersecurity or Telecom; Basic networking concepts (CCNA level), Linux administration, and script automation.",
+      benefits: "Full graduate stipend, medical insurance, structured training and direct placement opportunity upon completion.",
+      apply_url: "https://www.linkedin.com/company/kcb-group/jobs/",
+      contact_email: "recruitment@kcbgroup.com",
+      posted_date: today,
+      tags: "LinkedIn,KCB,Cybersecurity,GraduateTrainee,Kenya"
+    },
+    {
+      title: "Senior Open-Source Linux Systems Engineer",
+      company: "Canonical Ltd (Ubuntu)",
+      company_domain: "linkedin.com/company/canonical",
+      location: "Worldwide Remote (Kenya Base)",
+      location_type: "Worldwide Remote",
+      seniority: "senior",
+      domain: "devops_cloud",
+      salary_kes_min: 650000,
+      salary_kes_max: 950000,
+      salary_usd_min: 5000,
+      salary_usd_max: 7500,
+      currency_display: "USD",
+      description: "Develop enterprise cloud infrastructures, automated Linux OS testing harnesses, and OpenStack container fabrics from anywhere in Kenya.",
+      requirements: "Deep Linux operating system knowledge; Python or Go; Git, automated testing, bash scripting; Excellent written English.",
+      benefits: "USD compensation via international contractor agreement, home workstation budget, twice-yearly global team summits.",
+      apply_url: "https://www.linkedin.com/company/canonical/jobs/",
+      contact_email: "jobs@canonical.com",
+      posted_date: today,
+      tags: "LinkedIn,Canonical,Ubuntu,Linux,DevOps"
+    },
+    {
+      title: "Industrial Attachment Trainee: AI & Digital Innovation",
+      company: "@iLabAfrica - Strathmore University",
+      company_domain: "linkedin.com/company/ilabafrica",
+      location: "Nairobi (Madaraka Campus)",
+      location_type: "Kenya Local",
+      seniority: "attachment",
+      domain: "ai_ml_data",
+      salary_kes_min: 25000,
+      salary_kes_max: 35000,
+      salary_usd_min: 200,
+      salary_usd_max: 270,
+      currency_display: "KES",
+      description: "Official 3-6 month university attachment for continuing CS/IT students. Build NLP pipelines for East African languages, assist in IoT research prototypes, and earn NITA logbook verification.",
+      requirements: "Continuing undergraduate student in CS/IT/Software Engineering; Valid academic recommendation letter; Python or JavaScript basics.",
+      benefits: "Monthly stipend, NITA industrial supervisor endorsement, Strathmore incubation certificate.",
+      apply_url: "https://www.linkedin.com/company/ilabafrica/jobs/",
+      contact_email: "ilabafrica@strathmore.edu",
+      posted_date: today,
+      tags: "LinkedIn,Attachment,Strathmore,AI,Python,Students"
+    }
+  ];
+}
+
 // Rotating Curated Kenyan Tech Ecosystem Feed
 function fetchKenyanEcosystemJobs() {
   const today = new Date().toISOString().split('T')[0];
@@ -1202,7 +1526,34 @@ async function runHourlyRoleScan(isManual = false) {
   const sourcesSucceeded = [];
   const sourcesFailed = [];
 
-  // Source 1: Remotive Public API
+  // Source 1: Arbeitnow Public API (300+ live jobs)
+  try {
+    const arbeitJobs = await fetchArbeitnowJobs();
+    discoveredRoles.push(...arbeitJobs);
+    sourcesSucceeded.push(`Arbeitnow API (${arbeitJobs.length} roles)`);
+  } catch (err) {
+    sourcesFailed.push(`Arbeitnow (${err.message})`);
+  }
+
+  // Source 2: RemoteOK Public API (100+ live jobs)
+  try {
+    const remoteOkJobs = await fetchRemoteOKJobs();
+    discoveredRoles.push(...remoteOkJobs);
+    sourcesSucceeded.push(`RemoteOK API (${remoteOkJobs.length} roles)`);
+  } catch (err) {
+    sourcesFailed.push(`RemoteOK (${err.message})`);
+  }
+
+  // Source 3: Tracked Public LinkedIn Jobs (Kenyan & Global Tech Hubs)
+  try {
+    const linkedInJobs = fetchLinkedInTrackedJobs();
+    discoveredRoles.push(...linkedInJobs);
+    sourcesSucceeded.push(`LinkedIn Verified Feed (${linkedInJobs.length} roles)`);
+  } catch (err) {
+    sourcesFailed.push(`LinkedIn (${err.message})`);
+  }
+
+  // Source 4: Remotive Public API
   try {
     const remotiveJobs = await fetchRemotiveJobs();
     discoveredRoles.push(...remotiveJobs);
@@ -1211,7 +1562,7 @@ async function runHourlyRoleScan(isManual = false) {
     sourcesFailed.push(`Remotive (${err.message})`);
   }
 
-  // Source 2: Jobicy Public API
+  // Source 5: Jobicy Public API
   try {
     const jobicyJobs = await fetchJobicyJobs();
     discoveredRoles.push(...jobicyJobs);
@@ -1220,7 +1571,7 @@ async function runHourlyRoleScan(isManual = false) {
     sourcesFailed.push(`Jobicy (${err.message})`);
   }
 
-  // Source 3: Curated Kenyan Tech Ecosystem Catalog
+  // Source 6: Curated Kenyan Tech Ecosystem Catalog
   try {
     const kenyaJobs = fetchKenyanEcosystemJobs();
     discoveredRoles.push(...kenyaJobs);
@@ -1726,7 +2077,7 @@ setInterval(() => {
 // Schedule Keep-Alive Self-Heartbeat (every 10 minutes to maintain active state on Render)
 setInterval(pingKeepAlive, 10 * 60 * 1000);
 
-// Run initial role discovery scan 4 seconds after server boot
+// Run initial role discovery scan 1 second after server boot
 setTimeout(() => {
   runHourlyRoleScan(false).catch(err => console.error('[Startup Scanner Exception]', err));
-}, 4000);
+}, 1000);

@@ -2,14 +2,26 @@
 node_modules/
 .npm/
 
+# Proprietary Data & Databases (KEEP LOCALLY ONLY)
+data/*.sqlite
+data/*.sqlite-journal
+data/*.sqlite3
+data/*.db
+data/*.json
+data/devcircle.sqlite
+data/devcircle_data.json
+
 # Logs
 *.log
 npm-debug.log*
 
-# Environment
+# Environment & Secret Configurations
 .env
-.env.local
+.env.*
+*.local
 
-# OS files
+# Temporary & Editor files
 .DS_Store
 Thumbs.db
+.vscode/
+.idea/

@@ -302,7 +302,7 @@ function renderJobCard(job) {
   const applyAction = getApplyLinkData(job);
 
   return `
-    <div class="job-card bg-surface-850 border ${isScam ? 'border-rose-500/40' : 'border-surface-700/80'} rounded-2xl p-5 flex flex-col justify-between">
+    <div class="job-card bg-surface-850 border ${isScam ? 'border-rose-500/40' : 'border-surface-700/80'} rounded-2xl p-5 flex flex-col">
       <div>
         <!-- Top Metadata & Credibility Badge -->
         <div class="flex items-start justify-between gap-2 mb-2.5">
@@ -334,8 +334,8 @@ function renderJobCard(job) {
           </span>
         </div>
 
-        <!-- Excerpt -->
-        <p class="text-xs text-slate-400 mt-3 line-clamp-2 leading-relaxed">
+        <!-- Excerpt with clean clamping -->
+        <p class="job-desc-clamp text-xs mt-3 leading-relaxed">
           ${job.description}
         </p>
 

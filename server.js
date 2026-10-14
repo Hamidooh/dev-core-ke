@@ -1137,7 +1137,7 @@ function classifySeniority(title, description = '') {
 
 function classifyDomain(title, description = '') {
   const t = `${title} ${description}`.toLowerCase();
-  if (t.includes('devops') || t.includes('cloud') || t.includes('aws') || t.includes('sre') || t.includes('kubernetes') || t.includes('infrastructure') || t.includes('platform engineer') || t.includes('terraform')) {
+  if (t.includes('devops') || t.includes('cloud') || t.includes('aws') || t.includes('sre') || t.includes('kubernetes') || t.includes('cloud infrastructure') || t.includes('it infrastructure') || t.includes('infrastructure engineer') || t.includes('platform engineer') || t.includes('terraform')) {
     return 'devops_cloud';
   }
   if (t.includes('data engineer') || t.includes('machine learning') || t.includes('ai ') || t.includes('ml ') || t.includes('artificial intelligence') || t.includes('data science') || t.includes('llm') || t.includes('data analyst')) {
@@ -1213,7 +1213,7 @@ async function fetchRemotiveJobs() {
       salary_usd_min: sal.usd_min,
       salary_usd_max: sal.usd_max,
       currency_display: 'USD',
-      description: desc.slice(0, 1400),
+      description: desc.slice(0, 320),
       requirements: (item.tags || []).join(', ') || 'Modern software engineering principles, Git, async communication',
       benefits: 'Worldwide remote contract, equipment budget, flexible asynchronous hours',
       apply_url: item.url || 'https://remotive.com',
@@ -1252,7 +1252,7 @@ async function fetchJobicyJobs() {
       salary_usd_min: sal.usd_min,
       salary_usd_max: sal.usd_max,
       currency_display: 'USD',
-      description: desc.slice(0, 1400),
+      description: desc.slice(0, 320),
       requirements: 'Collaborative development, unit testing, agile sprints, clean code architecture',
       benefits: 'International remote setup, contractor payroll via Deel/Remote.com, paid time off',
       apply_url: item.url || 'https://jobicy.com',
@@ -1275,7 +1275,13 @@ async function fetchArbeitnowJobs() {
   const rawList = data.data || [];
 
   const softwareJobs = rawList.filter(item => {
-    const text = `${item.title || ''} ${(item.tags || []).join(' ')} ${item.description || ''}`.toLowerCase();
+    const titleLower = (item.title || '').toLowerCase();
+    const descLower = (item.description || '').toLowerCase();
+    // Exclude non-software engineering disciplines (e.g. Civil, Geotechnical, Structural, HVAC, Sales, Medical)
+    if (titleLower.includes('civil') || titleLower.includes('geotechnical') || titleLower.includes('structural') || titleLower.includes('hvac') || titleLower.includes('sales') || titleLower.includes('marketing') || titleLower.includes('recruiter') || titleLower.includes('accountant') || titleLower.includes('finance manager')) {
+      return false;
+    }
+    const text = `${titleLower} ${(item.tags || []).join(' ')} ${descLower}`;
     return text.includes('developer') || text.includes('engineer') || text.includes('software') || 
            text.includes('frontend') || text.includes('backend') || text.includes('fullstack') || 
            text.includes('devops') || text.includes('cloud') || text.includes('data') || 
@@ -1304,7 +1310,7 @@ async function fetchArbeitnowJobs() {
       salary_usd_min: sal.usd_min,
       salary_usd_max: sal.usd_max,
       currency_display: 'USD',
-      description: desc.slice(0, 1400),
+      description: desc.slice(0, 320),
       requirements: (item.tags || []).join(', ') || 'Modern software development, Git, unit testing, agile workflows',
       benefits: 'Global remote contract, equipment budget, paid leave, flexible working hours',
       apply_url: item.url || 'https://www.arbeitnow.com',
@@ -1359,7 +1365,7 @@ async function fetchRemoteOKJobs() {
       salary_usd_min: minUsd,
       salary_usd_max: maxUsd,
       currency_display: 'USD',
-      description: desc.slice(0, 1400),
+      description: desc.slice(0, 320),
       requirements: (item.tags || []).join(', ') || 'Deep technical proficiency, async communication, Git, production experience',
       benefits: 'Top-tier USD compensation, home office setup stipend, flexible hours',
       apply_url: item.apply_url || item.url || 'https://remoteok.com',

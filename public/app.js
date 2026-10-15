@@ -10,6 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
   loadReviews();
   loadScannerStatus();
   setInterval(loadScannerStatus, 45000);
+  checkAdminUrlTrigger();
 });
 
 // Tab Switcher
@@ -1462,10 +1463,55 @@ function renderDeveloperAnalytics(analytics) {
   }
 }
 
-// Global shortcut Ctrl+Shift+D or Cmd+Shift+D to open developer portal
+// --- STEALTH ADMIN ACCESS CHANNELS (Invisible to normal visitors) ---
+
+// 1. Triple-Click / Tap Stealth Trigger (Works on Mobile and Desktop on footer logo)
+let secretAdminClicks = 0;
+let secretAdminTimer = null;
+
+function handleSecretAdminClick() {
+  secretAdminClicks++;
+  clearTimeout(secretAdminTimer);
+  if (secretAdminClicks >= 3) {
+    secretAdminClicks = 0;
+    openDeveloperPortal();
+  } else {
+    secretAdminTimer = setTimeout(() => {
+      secretAdminClicks = 0;
+    }, 1200);
+  }
+}
+
+// 2. Secret URL Query Trigger (?admin, ?portal, or #admin)
+function checkAdminUrlTrigger() {
+  try {
+    const url = new URL(window.location.href);
+    const hasAdminParam = url.searchParams.has('admin') || url.searchParams.has('dev') || url.searchParams.has('portal');
+    const hasAdminHash = window.location.hash.toLowerCase().includes('admin') || window.location.hash.toLowerCase().includes('dev');
+
+    if (hasAdminParam || hasAdminHash) {
+      const pinParam = url.searchParams.get('admin') || url.searchParams.get('pin');
+      openDeveloperPortal();
+      if (pinParam && pinParam !== 'true' && pinParam !== '1') {
+        const pinInput = document.getElementById('input-dev-pin');
+        if (pinInput) {
+          pinInput.value = pinParam;
+          submitDeveloperPin();
+        }
+      }
+      // Silently sanitize the URL bar without reloading so passersby never notice ?admin
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  } catch (e) {
+    // Non-blocking catch
+  }
+}
+
+// 3. Global Stealth Shortcut: Ctrl+Shift+D or Cmd+Shift+D (Desktop / Laptop)
 window.addEventListener('keydown', (e) => {
   if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'd') {
     e.preventDefault();
     openDeveloperPortal();
   }
 });
+

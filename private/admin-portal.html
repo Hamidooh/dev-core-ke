@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DEV CORE KE | Developer Mission Control & Telemetry</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome Icons CDN -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+          },
+          colors: {
+            brand: {
+              500: '#10b981',
+              600: '#059669',
+              700: '#047857',
+            },
+            surface: {
+              950: '#060911',
+              900: '#0b101d',
+              850: '#10172a',
+              800: '#162038',
+              750: '#1f2c4c',
+              700: '#283860'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      background-color: #060911;
+      color: #f1f5f9;
+    }
+  </style>
+</head>
+<body class="font-sans min-h-screen flex flex-col bg-surface-950 text-slate-100 antialiased selection:bg-brand-500 selection:text-white">
+
+  <!-- Top Navigation Bar -->
+  <header class="border-b border-surface-800 bg-surface-900/90 backdrop-blur-md sticky top-0 z-40 px-4 py-3">
+    <div class="max-w-7xl mx-auto flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-brand-600 to-emerald-400 flex items-center justify-center text-white shadow-lg shadow-brand-500/20 font-mono font-bold text-sm">
+          DC
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="font-extrabold text-sm sm:text-base tracking-tight text-white font-mono">DEV CORE KE</h1>
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-purple-500/10 text-purple-400 border border-purple-500/30">
+              MISSION CONTROL
+            </span>
+          </div>
+          <p class="text-[11px] text-slate-400 hidden sm:block">Private Executive Telemetry & Real-Time Traffic Console</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <a href="/" class="text-xs font-mono text-slate-400 hover:text-white transition flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-surface-800 border border-surface-800 hover:border-surface-700">
+          <i class="fa-solid fa-arrow-left"></i> Public Site
+        </a>
+        <button id="btn-header-lock" onclick="lockConsole()" class="hidden text-xs font-mono text-rose-400 hover:text-rose-300 transition flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-950/30 hover:bg-rose-950/60 border border-rose-900/50">
+          <i class="fa-solid fa-lock"></i> Lock
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN CONTAINER -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+
+    <!-- VIEW 1: PIN AUTHENTICATION GATEWAY -->
+    <div id="auth-view" class="py-16 sm:py-24 max-w-md mx-auto text-center">
+      <div class="w-16 h-16 rounded-2xl bg-brand-500/10 border border-brand-500/30 text-brand-400 flex items-center justify-center text-3xl mx-auto mb-5 shadow-xl shadow-brand-500/10">
+        <i class="fa-solid fa-shield-halved"></i>
+      </div>
+      <h2 class="text-2xl font-extrabold text-white mb-2">Developer Authentication</h2>
+      <p class="text-xs text-slate-400 mb-8 leading-relaxed">
+        This is a restricted administrative console. Enter your developer security PIN to unlock real-time telemetry, visitor streams, and engine controls.
+      </p>
+
+      <form onsubmit="handleAuthSubmit(event)" class="space-y-4 text-left">
+        <div>
+          <label class="block text-xs font-mono font-medium text-slate-300 mb-2">Developer Access PIN</label>
+          <div class="relative">
+            <input type="password" id="admin-pin-input" placeholder="••••••••" class="w-full px-4 py-3 bg-surface-900 border border-surface-750 focus:border-brand-500 rounded-xl text-sm font-mono text-white placeholder-slate-600 outline-none transition shadow-inner" required autofocus autocomplete="current-password">
+            <button type="button" onclick="togglePinVisibility()" class="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 text-sm">
+              <i id="pin-eye-icon" class="fa-solid fa-eye"></i>
+            </button>
+          </div>
+          <div class="flex items-center justify-between text-[11px] text-slate-500 mt-2 font-mono">
+            <span><i class="fa-solid fa-lock text-brand-500 mr-1"></i> Protected by Rate Limiting & Lockout</span>
+            <span id="pin-hint" class="text-slate-400">Max 5 attempts</span>
+          </div>
+        </div>
+
+        <div id="auth-error-box" class="hidden text-xs text-rose-300 bg-rose-950/60 border border-rose-800/80 p-3 rounded-xl font-mono flex items-start gap-2.5">
+          <i class="fa-solid fa-circle-exclamation shrink-0 text-rose-400 mt-0.5"></i>
+          <span id="auth-error-msg">Access denied: Invalid Developer PIN.</span>
+        </div>
+
+        <button type="submit" id="btn-auth-submit" class="w-full py-3 px-4 bg-brand-600 hover:bg-brand-500 text-white font-bold rounded-xl text-sm transition flex items-center justify-center gap-2 shadow-lg shadow-brand-600/30 font-mono">
+          <i class="fa-solid fa-lock-open"></i> Unlock Mission Control
+        </button>
+      </form>
+    </div>
+
+    <!-- VIEW 2: DEVELOPER MISSION CONTROL DASHBOARD -->
+    <div id="dashboard-view" class="hidden space-y-6">
+
+      <!-- Action Bar & Live Pulse -->
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-surface-900 border border-surface-800 p-4 rounded-2xl shadow-sm">
+        <div class="flex items-center gap-3">
+          <span class="relative flex h-3 w-3">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+          </span>
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="font-bold text-white text-sm">Telemetry Stream Active</span>
+              <span id="badge-last-updated" class="text-[11px] font-mono text-slate-400">Updated just now</span>
+            </div>
+            <p class="text-xs text-slate-400">Privacy-preserving SHA-256 anonymized visitor tracking</p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2.5">
+          <button onclick="refreshData()" id="btn-refresh" class="px-3.5 py-2 rounded-xl bg-surface-800 hover:bg-surface-750 text-slate-200 text-xs font-mono font-semibold transition flex items-center gap-2 border border-surface-700">
+            <i id="icon-refresh" class="fa-solid fa-arrows-rotate"></i> Refresh
+          </button>
+          <button onclick="triggerScanner()" id="btn-scanner-scan" class="px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-mono font-semibold transition flex items-center gap-2 shadow-sm shadow-purple-600/30">
+            <i class="fa-solid fa-robot"></i> Run Role Scan
+          </button>
+        </div>
+      </div>
+
+      <!-- 4 Primary Metric Cards -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <!-- Total Impressions -->
+        <div class="bg-surface-900 border border-surface-800 p-4 sm:p-5 rounded-2xl flex flex-col justify-between shadow-xs">
+          <div class="flex items-center justify-between text-slate-400 text-xs font-mono mb-2">
+            <span>Total Pageviews</span>
+            <i class="fa-regular fa-eye text-sky-400"></i>
+          </div>
+          <div id="stat-pageviews" class="text-2xl sm:text-3xl font-extrabold text-white font-mono">0</div>
+          <div class="text-[11px] text-slate-400 mt-2">All-time site impressions</div>
+        </div>
+
+        <!-- Unique Visitors -->
+        <div class="bg-surface-900 border border-surface-800 p-4 sm:p-5 rounded-2xl flex flex-col justify-between shadow-xs">
+          <div class="flex items-center justify-between text-slate-400 text-xs font-mono mb-2">
+            <span>Unique Visitors</span>
+            <i class="fa-solid fa-users text-emerald-400"></i>
+          </div>
+          <div id="stat-uniques" class="text-2xl sm:text-3xl font-extrabold text-emerald-400 font-mono">0</div>
+          <div class="text-[11px] text-slate-400 mt-2">Deduplicated client hashes</div>
+        </div>
+
+        <!-- Today's Traffic -->
+        <div class="bg-surface-900 border border-surface-800 p-4 sm:p-5 rounded-2xl flex flex-col justify-between shadow-xs">
+          <div class="flex items-center justify-between text-slate-400 text-xs font-mono mb-2">
+            <span>Today's Impressions</span>
+            <i class="fa-solid fa-calendar-day text-sky-400"></i>
+          </div>
+          <div class="flex items-baseline gap-2">
+            <span id="stat-today-pageviews" class="text-2xl sm:text-3xl font-extrabold text-sky-400 font-mono">0</span>
+            <span class="text-xs text-slate-400 font-mono">(<span id="stat-today-uniques">0</span> unq)</span>
+          </div>
+          <div id="stat-today-sub" class="text-[11px] text-slate-400 mt-2">vs 0 yesterday</div>
+        </div>
+
+        <!-- Active 30m Sessions -->
+        <div class="bg-surface-900 border border-surface-800 p-4 sm:p-5 rounded-2xl flex flex-col justify-between shadow-xs">
+          <div class="flex items-center justify-between text-slate-400 text-xs font-mono mb-2">
+            <span>Active in 30 Mins</span>
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
+          </div>
+          <div class="flex items-baseline gap-2">
+            <span id="stat-active-30m" class="text-2xl sm:text-3xl font-extrabold text-emerald-300 font-mono">1</span>
+            <span class="text-xs text-emerald-400/80 font-mono">active session</span>
+          </div>
+          <div class="text-[11px] text-slate-400 mt-2">Real-time presence pulse</div>
+        </div>
+      </div>
+
+      <!-- 7-Day Activity Volume Bar Chart -->
+      <div class="bg-surface-900 border border-surface-800 p-5 rounded-2xl shadow-xs">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+          <h3 class="font-bold text-white text-sm flex items-center gap-2">
+            <i class="fa-solid fa-chart-column text-sky-400"></i> 7-Day Traffic Volume & Growth
+          </h3>
+          <div class="flex items-center gap-4 text-xs font-mono text-slate-300">
+            <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-sky-400 inline-block"></span> Pageviews</span>
+            <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-emerald-400 inline-block"></span> Unique Visitors</span>
+          </div>
+        </div>
+
+        <!-- Bar Container -->
+        <div id="chart-bars-container" class="h-36 flex items-end justify-between gap-2 pt-6 px-2 border-b border-surface-800">
+          <!-- Rendered dynamically -->
+        </div>
+      </div>
+
+      <!-- Two-Column Grid: Acquisition Channels vs Devices -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 text-xs">
+        <!-- Top Referrers -->
+        <div class="bg-surface-900 border border-surface-800 p-5 rounded-2xl shadow-xs">
+          <h3 class="font-bold text-white mb-4 flex items-center justify-between">
+            <span class="flex items-center gap-2"><i class="fa-solid fa-arrow-up-right-from-square text-sky-400"></i> Traffic Acquisition Channels</span>
+            <span class="text-[11px] font-mono text-slate-400">Top Sources</span>
+          </h3>
+          <div id="referrers-container" class="space-y-3">
+            <!-- Rendered dynamically -->
+          </div>
+        </div>
+
+        <!-- Devices, Platforms & OS -->
+        <div class="bg-surface-900 border border-surface-800 p-5 rounded-2xl shadow-xs flex flex-col justify-between">
+          <div>
+            <h3 class="font-bold text-white mb-4 flex items-center justify-between">
+              <span class="flex items-center gap-2"><i class="fa-solid fa-laptop-code text-purple-400"></i> Client Hardware & Platforms</span>
+              <span class="text-[11px] font-mono text-slate-400">Spectrum</span>
+            </h3>
+
+            <!-- Device Pills -->
+            <div id="devices-container" class="flex flex-wrap gap-2.5 mb-5">
+              <!-- Rendered dynamically -->
+            </div>
+
+            <!-- Top Browsers -->
+            <div class="mb-4">
+              <div class="text-[11px] font-mono text-slate-400 mb-2">Browser Distribution</div>
+              <div id="browsers-container" class="flex flex-wrap gap-2">
+                <!-- Rendered dynamically -->
+              </div>
+            </div>
+
+            <!-- Top Operating Systems -->
+            <div>
+              <div class="text-[11px] font-mono text-slate-400 mb-2">Operating Systems</div>
+              <div id="os-container" class="flex flex-wrap gap-2">
+                <!-- Rendered dynamically -->
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live Stream Table (Last 15 Hits) -->
+      <div class="bg-surface-900 border border-surface-800 p-5 rounded-2xl shadow-xs">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="font-bold text-white text-sm flex items-center gap-2">
+            <i class="fa-solid fa-satellite-dish text-emerald-400"></i> Live Telemetry Stream (Last 15 Hits)
+          </h3>
+          <span class="text-[11px] font-mono text-slate-400">Real-Time Ingestion</span>
+        </div>
+
+        <div class="border border-surface-800 rounded-xl overflow-hidden bg-surface-950/80 overflow-x-auto">
+          <table class="w-full text-left text-xs whitespace-nowrap">
+            <thead class="bg-surface-850 text-slate-300 border-b border-surface-800 font-mono text-[11px]">
+              <tr>
+                <th class="py-3 px-3.5">Time</th>
+                <th class="py-3 px-3.5">Device & Platform</th>
+                <th class="py-3 px-3.5">Browser</th>
+                <th class="py-3 px-3.5">Referrer Source</th>
+                <th class="py-3 px-3.5">Path</th>
+              </tr>
+            </thead>
+            <tbody id="visits-table-body" class="divide-y divide-surface-850 font-sans">
+              <!-- Rendered dynamically -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <footer class="border-t border-surface-800 py-6 px-4 text-center text-xs text-slate-500 font-mono">
+    DEV CORE KE • Autonomous Engine v2.4 • Confidential Administrative Interface
+  </footer>
+
+  <script>
+    let currentPin = sessionStorage.getItem('dev_core_admin_pin') || '';
+
+    document.addEventListener('DOMContentLoaded', () => {
+      // Auto-unlock if session PIN exists
+      if (currentPin) {
+        loadData(currentPin);
+      } else {
+        showAuthView();
+      }
+    });
+
+    function togglePinVisibility() {
+      const pinInput = document.getElementById('admin-pin-input');
+      const eyeIcon = document.getElementById('pin-eye-icon');
+      if (pinInput && eyeIcon) {
+        if (pinInput.type === 'password') {
+          pinInput.type = 'text';
+          eyeIcon.className = 'fa-solid fa-eye-slash';
+        } else {
+          pinInput.type = 'password';
+          eyeIcon.className = 'fa-solid fa-eye';
+        }
+      }
+    }
+
+    function showAuthView() {
+      document.getElementById('auth-view').classList.remove('hidden');
+      document.getElementById('dashboard-view').classList.add('hidden');
+      document.getElementById('btn-header-lock').classList.add('hidden');
+      const pinInput = document.getElementById('admin-pin-input');
+      if (pinInput) {
+        pinInput.value = '';
+        setTimeout(() => pinInput.focus(), 100);
+      }
+    }
+
+    function lockConsole() {
+      sessionStorage.removeItem('dev_core_admin_pin');
+      currentPin = '';
+      showAuthView();
+    }
+
+    async function handleAuthSubmit(e) {
+      if (e) e.preventDefault();
+      const pinInput = document.getElementById('admin-pin-input');
+      const btn = document.getElementById('btn-auth-submit');
+      const errBox = document.getElementById('auth-error-box');
+
+      const pin = (pinInput ? pinInput.value : '').trim();
+      if (!pin) return;
+
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin mr-1.5"></i> Authenticating...';
+      }
+      if (errBox) errBox.classList.add('hidden');
+
+      await loadData(pin);
+
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-lock-open mr-1.5"></i> Unlock Mission Control';
+      }
+    }
+
+    async function loadData(pin) {
+      const authView = document.getElementById('auth-view');
+      const dashView = document.getElementById('dashboard-view');
+      const lockBtn = document.getElementById('btn-header-lock');
+      const errBox = document.getElementById('auth-error-box');
+      const errMsg = document.getElementById('auth-error-msg');
+
+      try {
+        const res = await fetch(`/api/admin/analytics?pin=${encodeURIComponent(pin)}`);
+        const data = await res.json();
+
+        if (res.status === 200 && data.status === 'success') {
+          currentPin = pin;
+          sessionStorage.setItem('dev_core_admin_pin', pin);
+          if (authView) authView.classList.add('hidden');
+          if (dashView) dashView.classList.remove('hidden');
+          if (lockBtn) lockBtn.classList.remove('hidden');
+          renderDashboard(data.analytics);
+          document.getElementById('badge-last-updated').textContent = `Updated ${new Date().toLocaleTimeString()}`;
+        } else {
+          sessionStorage.removeItem('dev_core_admin_pin');
+          currentPin = '';
+          if (authView) authView.classList.remove('hidden');
+          if (dashView) dashView.classList.add('hidden');
+          if (lockBtn) lockBtn.classList.add('hidden');
+          if (errBox) {
+            errBox.classList.remove('hidden');
+            if (errMsg) errMsg.textContent = data.message || 'Access denied: Invalid developer PIN.';
+          }
+        }
+      } catch (err) {
+        if (errBox) {
+          errBox.classList.remove('hidden');
+          if (errMsg) errMsg.textContent = 'Connection error: ' + err.message;
+        }
+      }
+    }
+
+    function refreshData() {
+      if (!currentPin) {
+        showAuthView();
+        return;
+      }
+      const icon = document.getElementById('icon-refresh');
+      if (icon) icon.classList.add('fa-spin');
+      loadData(currentPin).finally(() => {
+        setTimeout(() => {
+          if (icon) icon.classList.remove('fa-spin');
+        }, 350);
+      });
+    }
+
+    async function triggerScanner() {
+      const btn = document.getElementById('btn-scanner-scan');
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Ingesting...';
+      }
+      try {
+        const res = await fetch('/api/scanner/trigger', { method: 'POST' });
+        const data = await res.json();
+        alert(`Role Scanner Complete!\nScanned: ${data.scanned_count} roles\nNew Verified Roles Added: ${data.added_count}`);
+        refreshData();
+      } catch (e) {
+        alert('Scanner trigger failed: ' + e.message);
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fa-solid fa-robot"></i> Run Role Scan';
+        }
+      }
+    }
+
+    function renderDashboard(analytics) {
+      if (!analytics) return;
+
+      // 1. Metric Counters
+      document.getElementById('stat-pageviews').textContent = Number(analytics.total_pageviews || 0).toLocaleString();
+      document.getElementById('stat-uniques').textContent = Number(analytics.unique_visitors_all_time || 0).toLocaleString();
+      document.getElementById('stat-today-pageviews').textContent = Number(analytics.today_pageviews || 0).toLocaleString();
+      document.getElementById('stat-today-uniques').textContent = Number(analytics.today_uniques || 0).toLocaleString();
+      document.getElementById('stat-today-sub').textContent = `vs ${analytics.yesterday_pageviews || 0} yesterday (${analytics.yesterday_uniques || 0} unique)`;
+      document.getElementById('stat-active-30m').textContent = analytics.active_past_30m || 1;
+
+      // 2. 7-Day Daily Bar Chart
+      const chartContainer = document.getElementById('chart-bars-container');
+      if (chartContainer && Array.isArray(analytics.daily_trends)) {
+        const maxVal = Math.max(...analytics.daily_trends.map(d => d.pageviews || 0), 10);
+        chartContainer.innerHTML = analytics.daily_trends.map(day => {
+          const pvPct = Math.max(8, Math.round(((day.pageviews || 0) / maxVal) * 100));
+          const uPct = Math.max(5, Math.round(((day.uniques || 0) / maxVal) * 100));
+          return `
+            <div class="flex-1 flex flex-col items-center justify-end h-full group relative cursor-pointer" title="${day.date}: ${day.pageviews} views, ${day.uniques} unique">
+              <div class="absolute -top-9 bg-surface-950 border border-surface-700 text-white text-[11px] py-1 px-2 rounded-lg opacity-0 group-hover:opacity-100 transition pointer-events-none whitespace-nowrap z-10 font-mono shadow-xl">
+                ${day.pageviews} views / ${day.uniques} unq
+              </div>
+              <div class="w-full flex items-end justify-center gap-1.5 h-24">
+                <div style="height: ${pvPct}%;" class="w-3 sm:w-4 bg-gradient-to-t from-blue-600 to-sky-400 rounded-t-sm transition-all duration-300"></div>
+                <div style="height: ${uPct}%;" class="w-3 sm:w-4 bg-gradient-to-t from-emerald-600 to-emerald-400 rounded-t-sm transition-all duration-300"></div>
+              </div>
+              <span class="text-[10px] font-mono text-slate-400 mt-2 truncate w-full text-center">
+                ${day.label.split(',')[0]}
+              </span>
+            </div>
+          `;
+        }).join('');
+      }
+
+      // 3. Traffic Channels
+      const referrersContainer = document.getElementById('referrers-container');
+      if (referrersContainer && Array.isArray(analytics.top_referrers)) {
+        const getRefIcon = (src) => {
+          const s = src.toLowerCase();
+          if (s.includes('linkedin')) return '<i class="fa-brands fa-linkedin text-[#0A66C2]"></i>';
+          if (s.includes('google')) return '<i class="fa-brands fa-google text-[#EA4335]"></i>';
+          if (s.includes('whatsapp')) return '<i class="fa-brands fa-whatsapp text-[#25D366]"></i>';
+          if (s.includes('twitter') || s.includes('x /')) return '<i class="fa-brands fa-x-twitter text-white"></i>';
+          if (s.includes('github')) return '<i class="fa-brands fa-github text-white"></i>';
+          return '<i class="fa-solid fa-link text-sky-400"></i>';
+        };
+
+        referrersContainer.innerHTML = analytics.top_referrers.map(r => `
+          <div>
+            <div class="flex items-center justify-between text-xs mb-1.5">
+              <span class="flex items-center gap-2 font-medium text-white">
+                ${getRefIcon(r.source)}
+                ${r.source}
+              </span>
+              <span class="font-mono text-slate-300 font-semibold">
+                ${r.count} <span class="text-[10px] text-slate-400">(${r.pct}%)</span>
+              </span>
+            </div>
+            <div class="w-full bg-surface-950 border border-surface-800 rounded-full h-2 overflow-hidden">
+              <div class="bg-gradient-to-r from-blue-600 to-sky-400 h-2 rounded-full" style="width: ${r.pct}%;"></div>
+            </div>
+          </div>
+        `).join('');
+      }
+
+      // 4. Devices Breakdown
+      const devicesContainer = document.getElementById('devices-container');
+      if (devicesContainer && analytics.devices) {
+        const totalDev = (analytics.devices.Desktop || 0) + (analytics.devices.Mobile || 0) + (analytics.devices.Tablet || 0) || 1;
+        const deskPct = Math.round(((analytics.devices.Desktop || 0) / totalDev) * 100);
+        const mobPct = Math.round(((analytics.devices.Mobile || 0) / totalDev) * 100);
+        const tabPct = Math.round(((analytics.devices.Tablet || 0) / totalDev) * 100);
+
+        devicesContainer.innerHTML = `
+          <div class="flex-1 bg-surface-850 border border-surface-750 p-3 rounded-xl text-center shadow-xs">
+            <div class="text-slate-300 text-[11px] flex items-center justify-center gap-1.5 font-mono">
+              <i class="fa-solid fa-desktop text-sky-400"></i> Desktop
+            </div>
+            <div class="text-lg font-extrabold text-white mt-1">${deskPct}%</div>
+            <div class="text-[10px] text-slate-400 font-mono">${analytics.devices.Desktop || 0} visits</div>
+          </div>
+          <div class="flex-1 bg-surface-850 border border-surface-750 p-3 rounded-xl text-center shadow-xs">
+            <div class="text-slate-300 text-[11px] flex items-center justify-center gap-1.5 font-mono">
+              <i class="fa-solid fa-mobile-screen text-emerald-400"></i> Mobile
+            </div>
+            <div class="text-lg font-extrabold text-white mt-1">${mobPct}%</div>
+            <div class="text-[10px] text-slate-400 font-mono">${analytics.devices.Mobile || 0} visits</div>
+          </div>
+          <div class="flex-1 bg-surface-850 border border-surface-750 p-3 rounded-xl text-center shadow-xs">
+            <div class="text-slate-300 text-[11px] flex items-center justify-center gap-1.5 font-mono">
+              <i class="fa-solid fa-tablet-screen-button text-purple-400"></i> Tablet
+            </div>
+            <div class="text-lg font-extrabold text-white mt-1">${tabPct}%</div>
+            <div class="text-[10px] text-slate-400 font-mono">${analytics.devices.Tablet || 0} visits</div>
+          </div>
+        `;
+      }
+
+      // 5. Browsers & OS
+      const browsersContainer = document.getElementById('browsers-container');
+      if (browsersContainer && Array.isArray(analytics.top_browsers)) {
+        browsersContainer.innerHTML = analytics.top_browsers.map(b => `
+          <span class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-surface-850 border border-surface-750 rounded-lg text-slate-200 font-mono text-[11px]">
+            <i class="fa-brands fa-${b.name.toLowerCase() === 'chrome' ? 'chrome text-emerald-400' : (b.name.toLowerCase() === 'safari' ? 'safari text-sky-400' : (b.name.toLowerCase() === 'firefox' ? 'firefox-browser text-amber-400' : 'edge text-brand-400'))}"></i>
+            ${b.name} <strong class="text-white ml-0.5">${b.pct}%</strong>
+          </span>
+        `).join('');
+      }
+
+      const osContainer = document.getElementById('os-container');
+      if (osContainer && Array.isArray(analytics.top_os)) {
+        osContainer.innerHTML = analytics.top_os.map(o => `
+          <span class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-surface-850 border border-surface-750 rounded-lg text-slate-200 font-mono text-[11px]">
+            <i class="fa-brands fa-${o.name.toLowerCase() === 'windows' ? 'windows text-sky-400' : (o.name.toLowerCase() === 'android' ? 'android text-emerald-400' : (o.name.toLowerCase() === 'ios' ? 'apple text-slate-200' : (o.name.toLowerCase() === 'macos' ? 'apple text-slate-200' : 'linux text-amber-400')))}"></i>
+            ${o.name} <strong class="text-white ml-0.5">${o.pct}%</strong>
+          </span>
+        `).join('');
+      }
+
+      // 6. Recent Real-Time Visits Table
+      const visitsBody = document.getElementById('visits-table-body');
+      if (visitsBody && Array.isArray(analytics.recent_visits)) {
+        visitsBody.innerHTML = analytics.recent_visits.map(v => {
+          const devIcon = v.device === 'Mobile' ? 'fa-mobile-screen text-emerald-400' : (v.device === 'Tablet' ? 'fa-tablet-screen-button text-purple-400' : 'fa-laptop text-sky-400');
+          return `
+            <tr class="hover:bg-surface-850/80 transition">
+              <td class="py-3 px-3.5 font-mono text-[11px] text-slate-400">
+                <span class="text-emerald-400 font-semibold">${v.time_ago}</span>
+              </td>
+              <td class="py-3 px-3.5">
+                <span class="inline-flex items-center gap-2 font-medium text-slate-200">
+                  <i class="fa-solid ${devIcon}"></i>
+                  ${v.os}
+                </span>
+              </td>
+              <td class="py-3 px-3.5 font-mono text-[11px] text-slate-300">
+                ${v.browser}
+              </td>
+              <td class="py-3 px-3.5">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded text-[10px] font-mono bg-surface-800 text-slate-200 border border-surface-700">
+                  ${v.referrer}
+                </span>
+              </td>
+              <td class="py-3 px-3.5 font-mono text-[11px] text-slate-300">
+                ${v.path}
+              </td>
+            </tr>
+          `;
+        }).join('');
+      }
+    }
+  </script>
+</body>
+</html>

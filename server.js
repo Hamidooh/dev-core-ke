@@ -2973,6 +2973,17 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  // --- DEDICATED SEPARATE ADMIN ENDPOINT (Completely Hidden from Public Site) ---
+  if (method === 'GET' && (pathname === '/admin-portal' || pathname === '/admin')) {
+    const adminHtmlPath = path.resolve(__dirname, 'private', 'admin-portal.html');
+    if (fs.existsSync(adminHtmlPath)) {
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      const stream = fs.createReadStream(adminHtmlPath);
+      stream.pipe(res);
+      return;
+    }
+  }
+
   // --- API ROUTES ---
 
   // 0a. GET /api/ping & GET /api/health (Uptime Monitor & Keep-Alive Heartbeat)

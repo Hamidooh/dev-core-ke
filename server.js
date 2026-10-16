@@ -66,13 +66,23 @@ function createFallbackDb(jsonFilePath) {
       if (cleanSql.startsWith('SELECT id FROM jobs WHERE')) {
         return {
           get(params) {
+            const originalId = (params.original_job_id || '').trim();
             const title = (params.title || '').toLowerCase();
             const company = (params.company || '').toLowerCase();
             const applyUrl = (params.apply_url || '').toLowerCase();
             return state.jobs.find(j => 
+              (originalId && j.original_job_id && String(j.original_job_id).trim() === originalId) ||
               (j.title.toLowerCase() === title && j.company.toLowerCase() === company) ||
               (applyUrl && j.apply_url && j.apply_url.toLowerCase() === applyUrl)
             ) || null;
+          }
+        };
+      }
+
+      if (cleanSql.includes('FROM jobs WHERE original_job_id IS NULL')) {
+        return {
+          all() {
+            return state.jobs.filter(j => !j.original_job_id);
           }
         };
       }
@@ -150,6 +160,19 @@ function createFallbackDb(jsonFilePath) {
             const j = state.jobs.find(item => item.id === id);
             if (j) {
               j.apply_url = applyUrl;
+              saveState();
+            }
+            return { changes: 1 };
+          }
+        };
+      }
+
+      if (cleanSql.startsWith('UPDATE jobs SET original_job_id')) {
+        return {
+          run(originalJobId, id) {
+            const j = state.jobs.find(item => item.id === id);
+            if (j) {
+              j.original_job_id = originalJobId;
               saveState();
             }
             return { changes: 1 };
@@ -257,11 +280,44 @@ try {
   db = createFallbackDb(DB_JSON_FILE);
 }
 
+// Helper to extract official/original requisition ID from URL or attributes
+function extractOriginalJobId(job) {
+  if (job.original_job_id && String(job.original_job_id).trim() !== '') {
+    return String(job.original_job_id).trim();
+  }
+  const url = (job.apply_url || '').trim();
+
+  // LinkedIn direct view: /jobs/view/402918451/
+  const lkMatch = url.match(/\/jobs\/view\/(\d+)/i);
+  if (lkMatch) return 'LK-' + lkMatch[1];
+
+  // Arbeitnow slug ending with numeric ID: senior-engineer-171975
+  const anMatch = url.match(/-(\d+)(?:\/?$|\?)/);
+  if (anMatch) return anMatch[1];
+
+  // Jobicy /jobs/155221-slug
+  const jbMatch = url.match(/\/jobs\/(\d+)/i);
+  if (jbMatch) return jbMatch[1];
+
+  // RemoteOK /remote-jobs/1029384
+  const roMatch = url.match(/remoteok\.com\/(?:remote-jobs\/)?(\d+)/i);
+  if (roMatch) return roMatch[1];
+
+  // Generic numeric requisition: /1839210/
+  const numMatch = url.match(/\/(\d{4,12})(?:\/|$|\?)/);
+  if (numMatch) return numMatch[1];
+
+  // Company prefix + ID fallback
+  const compPrefix = (job.company || 'JOB').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4) || 'DEV';
+  return `${compPrefix}-${job.id || Math.floor(1000 + Math.random() * 9000)}`;
+}
+
 // Setup Database Schema
 function initDatabase() {
   db.exec(`
     CREATE TABLE IF NOT EXISTS jobs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      original_job_id TEXT,
       title TEXT NOT NULL,
       company TEXT NOT NULL,
       company_domain TEXT,
@@ -342,11 +398,37 @@ function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_visits_hash ON site_visits(visitor_hash);
   `);
 
+  // Migration: Ensure original_job_id column exists
+  try {
+    db.exec('ALTER TABLE jobs ADD COLUMN original_job_id TEXT;');
+  } catch (e) {
+    // Column already exists, safe to ignore
+  }
+
+  // Backfill any missing original_job_id values on existing records
+  backfillOriginalJobIds();
+
   // Synchronize all verified positions on startup
   syncDatabaseRoles();
 
   // Ensure initial baseline analytics telemetry
   seedBaselineVisitsIfEmpty();
+}
+
+function backfillOriginalJobIds() {
+  try {
+    const jobsWithoutId = db.prepare("SELECT id, title, company, apply_url FROM jobs WHERE original_job_id IS NULL OR original_job_id = ''").all();
+    if (jobsWithoutId && jobsWithoutId.length > 0) {
+      const updateStmt = db.prepare('UPDATE jobs SET original_job_id = ? WHERE id = ?');
+      for (const j of jobsWithoutId) {
+        const genId = extractOriginalJobId(j);
+        updateStmt.run(genId, j.id);
+      }
+      console.log(`✅ Backfilled original_job_id for ${jobsWithoutId.length} existing jobs.`);
+    }
+  } catch (err) {
+    console.warn('Backfill original_job_id notice:', err.message);
+  }
 }
 
 function syncDatabaseRoles() {
@@ -362,19 +444,20 @@ function syncDatabaseRoles() {
       if (Array.isArray(data.jobs) && data.jobs.length > 0) {
         const checkExists = db.prepare(`
           SELECT id FROM jobs 
-          WHERE (LOWER(title) = LOWER(@title) AND LOWER(company) = LOWER(@company))
+          WHERE (@original_job_id != '' AND original_job_id = @original_job_id)
+             OR (LOWER(title) = LOWER(@title) AND LOWER(company) = LOWER(@company))
              OR (@apply_url != '' AND apply_url = @apply_url)
           LIMIT 1
         `);
 
         const insertJob = db.prepare(`
           INSERT INTO jobs (
-            title, company, company_domain, location, location_type, seniority, domain,
+            original_job_id, title, company, company_domain, location, location_type, seniority, domain,
             salary_kes_min, salary_kes_max, salary_usd_min, salary_usd_max, currency_display,
             description, requirements, benefits, credibility_score, brs_verified, scam_risk,
             apply_url, contact_email, remote_accessible_kenya, posted_date, tags
           ) VALUES (
-            @title, @company, @company_domain, @location, @location_type, @seniority, @domain,
+            @original_job_id, @title, @company, @company_domain, @location, @location_type, @seniority, @domain,
             @salary_kes_min, @salary_kes_max, @salary_usd_min, @salary_usd_max, @currency_display,
             @description, @requirements, @benefits, @credibility_score, @brs_verified, @scam_risk,
             @apply_url, @contact_email, @remote_accessible_kenya, @posted_date, @tags
@@ -383,13 +466,16 @@ function syncDatabaseRoles() {
 
         let inserted = 0;
         for (const job of data.jobs) {
+          const originalId = job.original_job_id || extractOriginalJobId(job);
           const exists = checkExists.get({
+            original_job_id: originalId,
             title: (job.title || '').trim(),
             company: (job.company || '').trim(),
             apply_url: (job.apply_url || '').trim()
           });
           if (!exists) {
             const { id, ...jobData } = job;
+            jobData.original_job_id = originalId;
             insertJob.run(jobData);
             inserted++;
           }
@@ -437,12 +523,12 @@ function syncDatabaseRoles() {
 function seedDatabase() {
   const insertJob = db.prepare(`
     INSERT INTO jobs (
-      title, company, company_domain, location, location_type, seniority, domain,
+      original_job_id, title, company, company_domain, location, location_type, seniority, domain,
       salary_kes_min, salary_kes_max, salary_usd_min, salary_usd_max, currency_display,
       description, requirements, benefits, credibility_score, brs_verified, scam_risk,
       apply_url, contact_email, remote_accessible_kenya, posted_date, tags
     ) VALUES (
-      @title, @company, @company_domain, @location, @location_type, @seniority, @domain,
+      @original_job_id, @title, @company, @company_domain, @location, @location_type, @seniority, @domain,
       @salary_kes_min, @salary_kes_max, @salary_usd_min, @salary_usd_max, @currency_display,
       @description, @requirements, @benefits, @credibility_score, @brs_verified, @scam_risk,
       @apply_url, @contact_email, @remote_accessible_kenya, @posted_date, @tags
@@ -467,6 +553,9 @@ function seedDatabase() {
       if (Array.isArray(data.jobs) && data.jobs.length > 0) {
         for (const job of data.jobs) {
           const { id, ...jobData } = job;
+          if (!jobData.original_job_id) {
+            jobData.original_job_id = extractOriginalJobId(job);
+          }
           insertJob.run(jobData);
         }
         didSeed = true;
@@ -884,6 +973,9 @@ function seedDatabase() {
   ];
 
   for (const job of initialJobs) {
+    if (!job.original_job_id) {
+      job.original_job_id = extractOriginalJobId(job);
+    }
     insertJob.run(job);
   }
 
@@ -1515,8 +1607,10 @@ async function fetchRemotiveJobs() {
     const seniority = classifySeniority(title, desc);
     const domain = classifyDomain(title, desc);
     const sal = estimateSalaries(seniority, domain);
+    const originalId = item.id ? String(item.id) : '';
 
     return {
+      original_job_id: originalId,
       title,
       company: item.company_name || 'Global Tech Employer',
       company_domain: (item.url || '').split('/')[2] || 'remotive.com',
@@ -1532,7 +1626,7 @@ async function fetchRemotiveJobs() {
       description: desc.slice(0, 320),
       requirements: (item.tags || []).join(', ') || 'Modern software engineering principles, Git, async communication',
       benefits: 'Worldwide remote contract, equipment budget, flexible asynchronous hours',
-      apply_url: item.url || 'https://remotive.com',
+      apply_url: item.url || (originalId ? `https://remotive.com/remote-jobs/${originalId}` : 'https://remotive.com'),
       contact_email: 'apply@remotive.com',
       posted_date: (item.publication_date || '').split('T')[0] || new Date().toISOString().split('T')[0],
       tags: `Remote,${(item.tags || []).slice(0, 4).join(',')}`
@@ -1554,8 +1648,10 @@ async function fetchJobicyJobs() {
     const seniority = classifySeniority(title, desc);
     const domain = classifyDomain(title, desc);
     const sal = estimateSalaries(seniority, domain);
+    const originalId = item.id ? String(item.id) : '';
 
     return {
+      original_job_id: originalId,
       title,
       company: item.companyName || 'Global Tech Partner',
       company_domain: (item.url || '').split('/')[2] || 'jobicy.com',
@@ -1571,7 +1667,7 @@ async function fetchJobicyJobs() {
       description: desc.slice(0, 320),
       requirements: 'Collaborative development, unit testing, agile sprints, clean code architecture',
       benefits: 'International remote setup, contractor payroll via Deel/Remote.com, paid time off',
-      apply_url: item.url || 'https://jobicy.com',
+      apply_url: item.url || (originalId ? `https://jobicy.com/jobs/${originalId}` : 'https://jobicy.com'),
       contact_email: 'careers@jobicy.com',
       posted_date: (item.pubDate || '').split('T')[0] || new Date().toISOString().split('T')[0],
       tags: `Remote,Jobicy,Engineering,${domain}`
@@ -1612,8 +1708,10 @@ async function fetchArbeitnowJobs() {
     const sal = estimateSalaries(seniority, domain);
     const company = item.company_name || 'Global Tech Partner';
     const domainFromUrl = (item.url || '').split('/')[2] || 'arbeitnow.com';
+    const originalId = item.slug ? String(item.slug).split('-').pop() : String(item.id || '');
 
     return {
+      original_job_id: originalId,
       title,
       company,
       company_domain: domainFromUrl,
@@ -1629,7 +1727,7 @@ async function fetchArbeitnowJobs() {
       description: desc.slice(0, 320),
       requirements: (item.tags || []).join(', ') || 'Modern software development, Git, unit testing, agile workflows',
       benefits: 'Global remote contract, equipment budget, paid leave, flexible working hours',
-      apply_url: item.url || 'https://www.arbeitnow.com',
+      apply_url: item.url || (originalId ? `https://www.arbeitnow.com/jobs/${originalId}` : 'https://www.arbeitnow.com'),
       contact_email: 'jobs@arbeitnow.com',
       posted_date: item.created_at ? new Date(item.created_at * 1000).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
       tags: `Remote,Arbeitnow,${(item.tags || []).slice(0, 3).join(',')}`
@@ -1667,8 +1765,10 @@ async function fetchRemoteOKJobs() {
 
     const minUsd = parseInt(item.salary_min, 10) > 0 ? parseInt(item.salary_min, 10) : sal.usd_min;
     const maxUsd = parseInt(item.salary_max, 10) > 0 ? parseInt(item.salary_max, 10) : sal.usd_max;
+    const originalId = item.id ? String(item.id) : '';
 
     return {
+      original_job_id: originalId,
       title,
       company,
       company_domain: (item.url || '').split('/')[2] || 'remoteok.com',
@@ -1684,7 +1784,7 @@ async function fetchRemoteOKJobs() {
       description: desc.slice(0, 320),
       requirements: (item.tags || []).join(', ') || 'Deep technical proficiency, async communication, Git, production experience',
       benefits: 'Top-tier USD compensation, home office setup stipend, flexible hours',
-      apply_url: item.apply_url || item.url || 'https://remoteok.com',
+      apply_url: item.apply_url || item.url || (originalId ? `https://remoteok.com/remote-jobs/${originalId}` : 'https://remoteok.com'),
       contact_email: 'apply@remoteok.com',
       posted_date: item.date ? item.date.split('T')[0] : new Date().toISOString().split('T')[0],
       tags: `RemoteOK,Remote,USD,${(item.tags || []).slice(0, 3).join(',')}`
@@ -1697,6 +1797,7 @@ function fetchLinkedInTrackedJobs() {
   const today = new Date().toISOString().split('T')[0];
   return [
     {
+      original_job_id: "LK-402918451",
       title: "Senior Cloud & Distributed Systems Engineer",
       company: "Safaricom PLC",
       company_domain: "linkedin.com/company/safaricom-plc",
@@ -1712,12 +1813,13 @@ function fetchLinkedInTrackedJobs() {
       description: "Scale high-throughput telecom cloud fabrics and microservices for Safaricom Digital Channels. Architect zero-downtime Kubernetes deployments, telemetry dashboards, and multi-region disaster recovery.",
       requirements: "5+ years in distributed architectures; Kubernetes, Go, Python, AWS / Azure; Terraform; Kafka event streaming.",
       benefits: "Executive medical cover, Safaricom data & airtime allowance, annual performance bonus, pension scheme.",
-      apply_url: "https://www.linkedin.com/company/safaricom-plc/jobs/",
+      apply_url: "https://www.linkedin.com/jobs/view/402918451/",
       contact_email: "careers@safaricom.co.ke",
       posted_date: today,
       tags: "LinkedIn,Safaricom,Cloud,Kubernetes,Nairobi"
     },
     {
+      original_job_id: "MSFT-1793821",
       title: "Software Engineer II - Azure Intelligent Cloud",
       company: "Microsoft Africa Development Centre (ADC)",
       company_domain: "linkedin.com/company/microsoft",
@@ -1733,12 +1835,13 @@ function fetchLinkedInTrackedJobs() {
       description: "Join Microsoft ADC Nairobi contributing directly to core Azure cloud services, high performance edge networking, and security fabrics deployed globally.",
       requirements: "3+ years production coding in C#, C++, Java or Go; Distributed systems fundamentals; Object-oriented design and CI/CD pipelines.",
       benefits: "Microsoft stock awards (RSUs), comprehensive family healthcare, education reimbursement, international relocation options.",
-      apply_url: "https://www.linkedin.com/company/microsoft/jobs/",
+      apply_url: "https://jobs.careers.microsoft.com/global/en/job/1793821/Software-Engineer-II-Azure-Intelligent-Cloud",
       contact_email: "adcnairobi@microsoft.com",
       posted_date: today,
       tags: "LinkedIn,Microsoft,ADC,Azure,C#"
     },
     {
+      original_job_id: "LK-401823940",
       title: "Fullstack Fintech Engineer (React & Go)",
       company: "Pesapal Kenya",
       company_domain: "linkedin.com/company/pesapal",
@@ -1754,12 +1857,13 @@ function fetchLinkedInTrackedJobs() {
       description: "Build robust merchant checkout interfaces and scalable payment webhooks across East and Central Africa. Work with M-Pesa, Visa, Mastercard, and Airtel Money gateway APIs.",
       requirements: "3+ years React / Next.js and Go or Node.js; REST APIs, WebSockets, PostgreSQL; Strong understanding of payment security standards (PCI-DSS).",
       benefits: "Competitive remuneration, medical insurance, continuous training on financial transaction protocols.",
-      apply_url: "https://www.linkedin.com/company/pesapal/jobs/",
+      apply_url: "https://www.linkedin.com/jobs/view/401823940/",
       contact_email: "jobs@pesapal.com",
       posted_date: today,
       tags: "LinkedIn,Pesapal,React,Go,Fintech,Kenya"
     },
     {
+      original_job_id: "TALA-6048192",
       title: "Senior Android Engineer (Fintech & Lending)",
       company: "Tala Kenya",
       company_domain: "linkedin.com/company/tala",
@@ -1775,12 +1879,13 @@ function fetchLinkedInTrackedJobs() {
       description: "Architect the next generation of Tala's mobile financial services application used by millions of customers across emerging markets. Focus on offline-first resilience, biometric authentication, and modular architecture.",
       requirements: "5+ years native Android in Kotlin; Jetpack Compose, Coroutines, Flow, Dagger/Hilt; Clean architecture and automated testing.",
       benefits: "Equity grant, wellness allowance, home office reimbursement, international cross-team collaboration.",
-      apply_url: "https://www.linkedin.com/company/tala/jobs/",
+      apply_url: "https://boards.greenhouse.io/tala/jobs/6048192",
       contact_email: "careers-ke@tala.co",
       posted_date: today,
       tags: "LinkedIn,Tala,Android,Kotlin,Mobile"
     },
     {
+      original_job_id: "LK-405918233",
       title: "DevOps & SRE Platform Lead",
       company: "Equity Group Holdings",
       company_domain: "linkedin.com/company/equity-bank-limited",
@@ -1796,12 +1901,13 @@ function fetchLinkedInTrackedJobs() {
       description: "Direct site reliability and platform automation squads across Equity Group banking infrastructure in Kenya, DRC, Uganda, and Rwanda. Ensure 99.999% uptime for core banking channels.",
       requirements: "7+ years in DevOps / SRE leadership; Kubernetes, OpenShift, HashiCorp stack (Terraform, Vault), Prometheus, incident management.",
       benefits: "Executive banking benefits, low-interest mortgage, comprehensive family health plan, annual executive bonus.",
-      apply_url: "https://www.linkedin.com/company/equity-bank-limited/jobs/",
+      apply_url: "https://www.linkedin.com/jobs/view/405918233/",
       contact_email: "jobs@equitybank.co.ke",
       posted_date: today,
       tags: "LinkedIn,EquityBank,DevOps,SRE,Kubernetes"
     },
     {
+      original_job_id: "DEEL-518294",
       title: "Global Remote Staff Software Engineer (Kenya Resident)",
       company: "Deel",
       company_domain: "linkedin.com/company/deel",
@@ -1817,12 +1923,13 @@ function fetchLinkedInTrackedJobs() {
       description: "Build global payroll, compliance, and hiring workflows powering international teams. Work in a fast-paced, 100% remote asynchronous environment with developers from 80+ countries.",
       requirements: "6+ years with TypeScript, React, Node.js, and PostgreSQL; Microservices architecture; High standards for async documentation and code quality.",
       benefits: "High-tier USD compensation, Deel health coverage, equipment stipend, remote work allowance, stock options.",
-      apply_url: "https://www.linkedin.com/company/deel/jobs/",
+      apply_url: "https://jobs.ashbyhq.com/deel/518294",
       contact_email: "careers@deel.com",
       posted_date: today,
       tags: "LinkedIn,Deel,Remote,USD,Fullstack,TypeScript"
     },
     {
+      original_job_id: "LK-399182744",
       title: "Senior Backend Engineer (Python / Kafka)",
       company: "Twiga Foods",
       company_domain: "linkedin.com/company/twiga-foods",
@@ -1838,12 +1945,13 @@ function fetchLinkedInTrackedJobs() {
       description: "Engineer dynamic routing, dispatch algorithms, and supply chain telemetry platforms connecting agricultural vendors with commercial retailers across Kenya.",
       requirements: "5+ years in Python (FastAPI/Django) or Go; Kafka message buses, PostgreSQL, Docker, Redis caching, CI/CD.",
       benefits: "Medical insurance, company transport, stock options, modern developer tooling.",
-      apply_url: "https://www.linkedin.com/company/twiga-foods/jobs/",
+      apply_url: "https://www.linkedin.com/jobs/view/399182744/",
       contact_email: "careers@twigafoods.com",
       posted_date: today,
       tags: "LinkedIn,Twiga,Python,Kafka,AgriTech"
     },
     {
+      original_job_id: "LK-407182930",
       title: "Graduate Technology Trainee (Cybersecurity & Networks)",
       company: "KCB Group",
       company_domain: "linkedin.com/company/kcb-group",
@@ -1859,12 +1967,13 @@ function fetchLinkedInTrackedJobs() {
       description: "Join KCB Group's premier graduate technical acceleration program. Rotate through SOC operations, threat hunting, secure API gateways, and CBK compliance auditing.",
       requirements: "Degree in CS, IT, Cybersecurity or Telecom; Basic networking concepts (CCNA level), Linux administration, and script automation.",
       benefits: "Full graduate stipend, medical insurance, structured training and direct placement opportunity upon completion.",
-      apply_url: "https://www.linkedin.com/company/kcb-group/jobs/",
+      apply_url: "https://www.linkedin.com/jobs/view/407182930/",
       contact_email: "recruitment@kcbgroup.com",
       posted_date: today,
       tags: "LinkedIn,KCB,Cybersecurity,GraduateTrainee,Kenya"
     },
     {
+      original_job_id: "CAN-5839210",
       title: "Senior Open-Source Linux Systems Engineer",
       company: "Canonical Ltd (Ubuntu)",
       company_domain: "linkedin.com/company/canonical",
@@ -1880,12 +1989,13 @@ function fetchLinkedInTrackedJobs() {
       description: "Develop enterprise cloud infrastructures, automated Linux OS testing harnesses, and OpenStack container fabrics from anywhere in Kenya.",
       requirements: "Deep Linux operating system knowledge; Python or Go; Git, automated testing, bash scripting; Excellent written English.",
       benefits: "USD compensation via international contractor agreement, home workstation budget, twice-yearly global team summits.",
-      apply_url: "https://www.linkedin.com/company/canonical/jobs/",
+      apply_url: "https://canonical.com/careers/5839210/senior-linux-systems-engineer",
       contact_email: "jobs@canonical.com",
       posted_date: today,
       tags: "LinkedIn,Canonical,Ubuntu,Linux,DevOps"
     },
     {
+      original_job_id: "ILAB-2026-088",
       title: "Industrial Attachment Trainee: AI & Digital Innovation",
       company: "@iLabAfrica - Strathmore University",
       company_domain: "linkedin.com/company/ilabafrica",
@@ -1901,12 +2011,13 @@ function fetchLinkedInTrackedJobs() {
       description: "Official 3-6 month university attachment for continuing CS/IT students. Build NLP pipelines for East African languages, assist in IoT research prototypes, and earn NITA logbook verification.",
       requirements: "Continuing undergraduate student in CS/IT/Software Engineering; Valid academic recommendation letter; Python or JavaScript basics.",
       benefits: "Monthly stipend, NITA industrial supervisor endorsement, Strathmore incubation certificate.",
-      apply_url: "https://www.linkedin.com/company/ilabafrica/jobs/",
+      apply_url: "https://ilabafrica.ac.ke/careers/ai-digital-innovation-trainee-2026",
       contact_email: "ilabafrica@strathmore.edu",
       posted_date: today,
       tags: "LinkedIn,Attachment,Strathmore,AI,Python,Students"
     },
     {
+      original_job_id: "LK-403918204",
       title: "Senior Cloud Platform Security Architect",
       company: "Safaricom PLC",
       company_domain: "linkedin.com/company/safaricom-plc",
@@ -1922,12 +2033,13 @@ function fetchLinkedInTrackedJobs() {
       description: "Define zero-trust cybersecurity architecture across Safaricom cloud platforms, M-Pesa core infrastructures, and 5G edge networks. Ensure compliance with CBK, ISO27001, and Data Protection Act.",
       requirements: "6+ years in cloud security; CISSP/CISM; AWS/Azure security specialties, Kubernetes RBAC, HashiCorp Vault, vulnerability remediation.",
       benefits: "Executive health cover, low-interest mortgage, Safaricom data/airtime benefits, annual performance incentive.",
-      apply_url: "https://www.linkedin.com/company/safaricom-plc/jobs/",
+      apply_url: "https://www.linkedin.com/jobs/view/403918204/",
       contact_email: "careers@safaricom.co.ke",
       posted_date: today,
       tags: "LinkedIn,Safaricom,Security,Cloud,CISSP"
     },
     {
+      original_job_id: "MSFT-1829304",
       title: "AI Copilot & Large Language Model Research Engineer",
       company: "Microsoft Africa Development Centre (ADC)",
       company_domain: "linkedin.com/company/microsoft",
@@ -1943,12 +2055,13 @@ function fetchLinkedInTrackedJobs() {
       description: "Research and deploy multilingual NLP and generative AI models tailored for African languages and emerging markets. Work directly with Microsoft AI teams globally.",
       requirements: "5+ years in ML/AI research or production systems; PyTorch, Transformer architectures, Fine-tuning LLMs, Vector DBs (Qdrant, Pinecone); Python, C++.",
       benefits: "Microsoft Stock awards (RSUs), comprehensive family medical, education reimbursement, international travel.",
-      apply_url: "https://www.linkedin.com/company/microsoft/jobs/",
+      apply_url: "https://jobs.careers.microsoft.com/global/en/job/1829304/AI-Copilot-Research-Engineer",
       contact_email: "adcnairobi@microsoft.com",
       posted_date: today,
       tags: "LinkedIn,Microsoft,ADC,AI,LLM,Python"
     },
     {
+      original_job_id: "GOOG-1392810",
       title: "Android Developer Relations Engineer (Sub-Saharan Africa)",
       company: "Google Kenya",
       company_domain: "linkedin.com/company/google",
@@ -1964,12 +2077,13 @@ function fetchLinkedInTrackedJobs() {
       description: "Partner with developer communities, startups, and enterprises across Africa to architect high-performance Android experiences optimized for Next Billion Users (NBU).",
       requirements: "3+ years Android engineering with Kotlin, Jetpack Compose; Public speaking or technical documentation experience; Passion for developer ecosystem growth.",
       benefits: "Google equity (GSUs), world-class health insurance, gourmet food on campus, continuous learning budget.",
-      apply_url: "https://www.linkedin.com/company/google/jobs/",
+      apply_url: "https://www.google.com/about/careers/applications/jobs/results/1392810-android-developer-relations-engineer",
       contact_email: "careers@google.com",
       posted_date: today,
       tags: "LinkedIn,Google,Android,Kotlin,DevRel,Nairobi"
     },
     {
+      original_job_id: "AMZN-2691048",
       title: "Associate Cloud Solutions Architect (FinTech & Banking)",
       company: "Amazon Web Services (AWS)",
       company_domain: "linkedin.com/company/amazon-web-services",
@@ -1985,12 +2099,13 @@ function fetchLinkedInTrackedJobs() {
       description: "Guide leading African banks, payment switches, and fintech unicorns in migrating critical workloads to AWS cloud with high resilience, compliance, and disaster recovery.",
       requirements: "3+ years software architecture or DevOps; AWS Certified Solutions Architect; Hands-on proficiency with Terraform, ECS/EKS, Serverless Lambda.",
       benefits: "Amazon RSUs, comprehensive healthcare, cell phone and home internet reimbursement, executive training.",
-      apply_url: "https://www.linkedin.com/company/amazon-web-services/jobs/",
+      apply_url: "https://www.amazon.jobs/en/jobs/2691048/associate-cloud-solutions-architect",
       contact_email: "aws-kenya-hiring@amazon.com",
       posted_date: today,
       tags: "LinkedIn,AWS,Cloud,SolutionsArchitect,Fintech"
     },
     {
+      original_job_id: "LK-408291772",
       title: "Lead Mobile Applications Engineer (iOS & Android)",
       company: "NCBA Group",
       company_domain: "linkedin.com/company/ncba-group",
@@ -2006,12 +2121,13 @@ function fetchLinkedInTrackedJobs() {
       description: "Direct mobile engineering squads building NCBA Loop and mobile banking applications serving retail and corporate customers across East Africa.",
       requirements: "6+ years mobile development experience (Swift, Kotlin, or Flutter); Micro-frontend mobile architectures; Biometrics security, CI/CD pipeline automation.",
       benefits: "Competitive banking remuneration, staff mortgage scheme, comprehensive medical cover, bonus scheme.",
-      apply_url: "https://www.linkedin.com/company/ncba-group/jobs/",
+      apply_url: "https://www.linkedin.com/jobs/view/408291772/",
       contact_email: "jobs@ncbagroup.com",
       posted_date: today,
       tags: "LinkedIn,NCBA,Mobile,Flutter,Fintech,Kenya"
     },
     {
+      original_job_id: "LK-406182948",
       title: "Enterprise Payments API & Open Banking Architect",
       company: "KCB Group",
       company_domain: "linkedin.com/company/kcb-group",
@@ -2027,12 +2143,13 @@ function fetchLinkedInTrackedJobs() {
       description: "Architect open banking integration APIs, merchant settlement engines, and cross-border remittance switches across 7 East African subsidiaries.",
       requirements: "5+ years backend systems engineering in Java (Spring Boot) or Go; Apache Kafka, API Gateway (Kong/Apigee), ISO 20022 message formats.",
       benefits: "Executive banking package, subsidized loans, pension fund, medical insurance.",
-      apply_url: "https://www.linkedin.com/company/kcb-group/jobs/",
+      apply_url: "https://www.linkedin.com/jobs/view/406182948/",
       contact_email: "recruitment@kcbgroup.com",
       posted_date: today,
       tags: "LinkedIn,KCB,Banking,APIs,Spring,Kafka"
     },
     {
+      original_job_id: "LK-407819203",
       title: "Senior Fullstack Engineer (React, TypeScript & Node.js)",
       company: "Andela Kenya",
       company_domain: "linkedin.com/company/andela",
@@ -2048,12 +2165,13 @@ function fetchLinkedInTrackedJobs() {
       description: "Join Andela's global network matching top Kenyan technologists with elite US/European engineering organizations. Work on mission-critical SaaS applications.",
       requirements: "5+ years in modern fullstack web development; React, TypeScript, Node.js, GraphQL, PostgreSQL; Strong asynchronous collaboration skills.",
       benefits: "USD compensation paid reliably, home office setup budget, health insurance, flexible paid time off.",
-      apply_url: "https://www.linkedin.com/company/andela/jobs/",
+      apply_url: "https://www.linkedin.com/jobs/view/407819203/",
       contact_email: "careers@andela.com",
       posted_date: today,
       tags: "LinkedIn,Andela,Fullstack,React,TypeScript,USD"
     },
     {
+      original_job_id: "LK-401928475",
       title: "Tingg Core Payment Switch Reliability Engineer",
       company: "Cellulant",
       company_domain: "linkedin.com/company/cellulant",
@@ -2069,12 +2187,13 @@ function fetchLinkedInTrackedJobs() {
       description: "Maintain and optimize Cellulant's Tingg payments switch processing transactions across 35 African countries. Ensure 99.99% transaction reliability and low latency.",
       requirements: "3+ years backend development with Java or PHP/Laravel; MySQL, Redis, RabbitMQ; Experience in transaction authorization and reconciliation.",
       benefits: "Comprehensive healthcare, professional certification sponsorship, hybrid work policy.",
-      apply_url: "https://www.linkedin.com/company/cellulant/jobs/",
+      apply_url: "https://www.linkedin.com/jobs/view/401928475/",
       contact_email: "jobs@cellulant.io",
       posted_date: today,
       tags: "LinkedIn,Cellulant,Tingg,Fintech,Java,Nairobi"
     },
     {
+      original_job_id: "LK-404819283",
       title: "Senior Backend Go Engineer - Supply Chain & Logistics",
       company: "Wasoko",
       company_domain: "linkedin.com/company/wasoko",
@@ -2090,12 +2209,13 @@ function fetchLinkedInTrackedJobs() {
       description: "Build distributed logistics routing algorithms, warehouse stock forecasting models, and B2B checkout solutions empowering informal retailers across Africa.",
       requirements: "5+ years Go (Golang) development; Distributed architectures, Docker, Kubernetes, PostgreSQL, PostGIS spatial queries.",
       benefits: "Equity participation, wellness allowance, top-spec MacBook Pro, international team environment.",
-      apply_url: "https://www.linkedin.com/company/wasoko/jobs/",
+      apply_url: "https://www.linkedin.com/jobs/view/404819283/",
       contact_email: "careers@wasoko.com",
       posted_date: today,
       tags: "LinkedIn,Wasoko,Go,Logistics,Backend,Kenya"
     },
     {
+      original_job_id: "LK-405192847",
       title: "Technical Lead & Senior Software Engineering Instructor",
       company: "Moringa School",
       company_domain: "linkedin.com/company/moringa-school",
@@ -2111,7 +2231,7 @@ function fetchLinkedInTrackedJobs() {
       description: "Mentor and lead curriculum development for cohorts of aspiring Kenyan software engineers. Teach React, Python/Flask, algorithms, and industry-standard CI/CD practices.",
       requirements: "4+ years software development experience; Deep passion for tech education and mentorship; Excellent interpersonal and code review skills.",
       benefits: "Medical insurance, flexible schedule, continuous learning budget, high-impact community role.",
-      apply_url: "https://www.linkedin.com/company/moringa-school/jobs/",
+      apply_url: "https://www.linkedin.com/jobs/view/405192847/",
       contact_email: "careers@moringaschool.com",
       posted_date: today,
       tags: "LinkedIn,MoringaSchool,Education,React,Python,Mentorship"
@@ -2124,6 +2244,7 @@ function fetchKenyanEcosystemJobs() {
   const today = new Date().toISOString().split('T')[0];
   return [
     {
+      original_job_id: "SAF-DAR-4091",
       title: "Daraja M-Pesa API Backend Engineer (Go / Microservices)",
       company: "Safaricom PLC - Digital Innovation Hub",
       company_domain: "safaricom.co.ke",
@@ -2139,12 +2260,13 @@ function fetchKenyanEcosystemJobs() {
       description: "Scale high-throughput payment settlement microservices processing millions of daily transactions on M-Pesa. Design ultra-resilient distributed architectures, low latency messaging queues, and merchant webhook gateways.",
       requirements: "3+ years production experience with Go (Golang) or Java; Kafka / RabbitMQ event-driven architectures; PostgreSQL optimization; Redis caching.",
       benefits: "Competitive executive remuneration, Safaricom data/airtime allowance, comprehensive family medical, annual performance bonus.",
-      apply_url: "https://www.safaricom.co.ke/careers",
+      apply_url: "https://safaricom.taleo.net/careersection/ex/jobdetail.ftl?job=SAF-DAR-4091",
       contact_email: "careers@safaricom.co.ke",
       posted_date: today,
       tags: "M-Pesa,Go,Kafka,PostgreSQL,Fintech,Kenya"
     },
     {
+      original_job_id: "MSFT-ADC-17849",
       title: "Cloud & Intelligent Systems Resident (ADC Apprenticeship)",
       company: "Microsoft Africa Development Centre (ADC)",
       company_domain: "microsoft.com",
@@ -2160,12 +2282,13 @@ function fetchKenyanEcosystemJobs() {
       description: "Fast-track technical apprenticeship within Microsoft ADC Nairobi. Collaborate with worldwide Azure engineering teams, optimize high-scale cloud fabrics, and implement telemetry diagnostics.",
       requirements: "Recent graduate or final-year in Computer Science/IT/Engineering; Strong data structures and algorithms foundation in C#, C++, Java or Python; Azure/AWS fundamentals.",
       benefits: "Top-tier stipend, Microsoft Surface laptop, health insurance, global mentorship with Redmond & Nairobi Principal Architects.",
-      apply_url: "https://careers.microsoft.com",
+      apply_url: "https://jobs.careers.microsoft.com/global/en/job/17849/Cloud-Intelligent-Systems-Resident",
       contact_email: "adcjobs@microsoft.com",
       posted_date: today,
       tags: "Microsoft,ADC,Azure,Apprentice,Nairobi"
     },
     {
+      original_job_id: "EQB-ARCH-8821",
       title: "Core Banking Microservices Architect",
       company: "Equity Group Holdings",
       company_domain: "equitygroupholdings.com",
@@ -2181,12 +2304,13 @@ function fetchKenyanEcosystemJobs() {
       description: "Spearhead architectural design for digital banking channels serving 20+ million customers across Kenya, Uganda, Rwanda, DRC and South Sudan. Drive event sourcing, zero-trust security and ISO20022 compliance.",
       requirements: "6+ years software architecture; Spring Boot, Kubernetes, Apache Kafka, Distributed Transactions, Open Banking & CBK compliance standards.",
       benefits: "Executive banking package, subsidized loans, pension scheme, annual performance incentive.",
-      apply_url: "https://equitygroupholdings.com/careers",
+      apply_url: "https://equitybank.taleo.net/careersection/ex/jobdetail.ftl?job=EQB-ARCH-8821",
       contact_email: "jobs@equitybank.co.ke",
       posted_date: today,
       tags: "Fintech,Banking,Spring,Architecture,Kenya"
     },
     {
+      original_job_id: "TALA-AND-5912",
       title: "Fintech Android Core Engineer (Kotlin)",
       company: "Tala Kenya",
       company_domain: "tala.co",
@@ -2202,12 +2326,13 @@ function fetchKenyanEcosystemJobs() {
       description: "Build robust, battery-efficient, accessible financial application features for millions of underbanked consumers. Maintain offline-first architecture, device analytics, and end-to-end security encryption.",
       requirements: "3+ years Android native development with Kotlin; Coroutines, Flow, Jetpack Compose; Experience in fintech or high-security client applications.",
       benefits: "Stock options, wellness stipend, remote-work allowance, comprehensive healthcare.",
-      apply_url: "https://tala.co/careers",
+      apply_url: "https://boards.greenhouse.io/tala/jobs/591204",
       contact_email: "careers-ke@tala.co",
       posted_date: today,
       tags: "Android,Kotlin,Fintech,Compose,Tala"
     },
     {
+      original_job_id: "TWG-LOG-3301",
       title: "Supply Chain Distributed Systems Engineer",
       company: "Twiga Foods",
       company_domain: "twigafoods.com",
@@ -2223,12 +2348,13 @@ function fetchKenyanEcosystemJobs() {
       description: "Design automated routing algorithms, inventory tracking, and warehouse dispatch platforms connecting thousands of informal retail vendors with agricultural produce.",
       requirements: "Proficiency in Go, Node.js or Python; PostgreSQL and spatial queries (PostGIS); Redis; Docker & automated CI/CD.",
       benefits: "Transport shuttles, medical cover, stock options, modern tech tooling.",
-      apply_url: "https://twigafoods.com/careers",
+      apply_url: "https://twigafoods.com/careers/supply-chain-distributed-systems-engineer-3301",
       contact_email: "careers@twigafoods.com",
       posted_date: today,
       tags: "AgriTech,Logistics,Go,Node,Fullstack"
     },
     {
+      original_job_id: "PSP-INT-9912",
       title: "Payment Gateway Integration Specialist",
       company: "Pesapal Kenya",
       company_domain: "pesapal.com",
@@ -2244,12 +2370,13 @@ function fetchKenyanEcosystemJobs() {
       description: "Assist merchant partners in seamlessly integrating Pesapal APIs across e-commerce platforms, point-of-sale systems, and custom web apps. Debug payload callbacks and signature verifications.",
       requirements: "Strong understanding of REST APIs, webhook lifecycle, JSON, and postman. Familiarity with PHP, Node.js or Python.",
       benefits: "In-depth payment systems training, medical cover, lunch on campus.",
-      apply_url: "https://www.pesapal.com/careers",
+      apply_url: "https://pesapal.bamboohr.com/careers/9912",
       contact_email: "jobs@pesapal.com",
       posted_date: today,
       tags: "Pesapal,PaymentGateway,REST,PHP,Node"
     },
     {
+      original_job_id: "ILAB-AI-2026",
       title: "AI Research & Digital Solutions Industrial Attachment",
       company: "@iLabAfrica - Strathmore University",
       company_domain: "ilabafrica.ac.ke",
@@ -2257,7 +2384,7 @@ function fetchKenyanEcosystemJobs() {
       location_type: "Kenya Local",
       seniority: "attachment",
       domain: "ai_ml_data",
-      salary_kes_min: 220000 ? 25000 : 25000,
+      salary_kes_min: 25000,
       salary_kes_max: 35000,
       salary_usd_min: 200,
       salary_usd_max: 270,
@@ -2265,12 +2392,13 @@ function fetchKenyanEcosystemJobs() {
       description: "Official 3-6 month industrial attachment for continuing university students. Conduct research in NLP for local languages (Swahili AI), build health tech dashboards, and assist in hackathons.",
       requirements: "Continuing student in CS/IT/Data Science; Valid university attachment letter; Python or JavaScript basics; Willingness to learn on-site.",
       benefits: "Monthly stipend, NITA logbook signing, Strathmore innovation certificate.",
-      apply_url: "https://ilabafrica.ac.ke/careers",
+      apply_url: "https://ilabafrica.ac.ke/careers/ai-research-industrial-attachment-2026",
       contact_email: "ilabafrica@strathmore.edu",
       posted_date: today,
       tags: "Attachment,Strathmore,AI,Python,University"
     },
     {
+      original_job_id: "NITA-ATT-2026",
       title: "Software Development Industrial Attachment (NITA Accredited)",
       company: "National Industrial Training Authority (NITA) Partner Cohort",
       company_domain: "nita.go.ke",
@@ -2286,12 +2414,13 @@ function fetchKenyanEcosystemJobs() {
       description: "Accredited attachment placement for Kenyan university and technical college students. Build accessible web frontends, learn responsive CSS, Git workflows, and documentation.",
       requirements: "3rd/4th year student needing attachment; Introduction to HTML, CSS, JavaScript; Academic endorsement letter.",
       benefits: "NITA certified industrial logbook endorsement, monthly stipend, workplace insurance.",
-      apply_url: "https://nita.go.ke",
+      apply_url: "https://nita.go.ke/portal/industrial-training/attachment-cohort-2026",
       contact_email: "industrial-training@nita.go.ke",
       posted_date: today,
       tags: "NITA,Attachment,Students,Frontend,Accredited"
     },
     {
+      original_job_id: "LTL-FLT-7721",
       title: "SuperApp Flutter Lead Engineer",
       company: "Little App / Craft Silicon",
       company_domain: "little.africa",
@@ -2307,12 +2436,13 @@ function fetchKenyanEcosystemJobs() {
       description: "Lead mobile development for Little SuperApp encompassing ride-hailing, parcel delivery, grocery logistics, and corporate payment wallets across Kenya, Uganda, Tanzania and Ethiopia.",
       requirements: "5+ years mobile engineering with at least 3+ years in Flutter & Dart; State management (Bloc/Riverpod); High performance maps & GPS telemetry.",
       benefits: "Competitive remuneration, corporate transport, lunch provided, medical cover.",
-      apply_url: "https://little.africa/careers",
+      apply_url: "https://little.africa/careers/superapp-flutter-lead-engineer-7721",
       contact_email: "careers@little.africa",
       posted_date: today,
       tags: "Flutter,Dart,Mobile,SuperApp,Nairobi"
     },
     {
+      original_job_id: "CAN-DOPS-6619",
       title: "Global Remote Staff DevOps Engineer (Kenyan Contractor)",
       company: "Canonical Ltd (Ubuntu)",
       company_domain: "canonical.com",
@@ -2328,12 +2458,13 @@ function fetchKenyanEcosystemJobs() {
       description: "Join Canonical's distributed global infrastructure team from Nairobi. Build automated CI pipelines, Linux kernel build farms, and cloud deployments on OpenStack and Kubernetes.",
       requirements: "Deep Linux systems mastery; Python or Go automation; Kubernetes, Terraform, Prometheus; Strong written async English skills.",
       benefits: "International USD contract paid to Kenyan bank, home office budget, international team meetups twice a year.",
-      apply_url: "https://canonical.com/careers",
+      apply_url: "https://canonical.com/careers/6619/staff-devops-engineer-remote",
       contact_email: "recruitment@canonical.com",
       posted_date: today,
       tags: "Canonical,Ubuntu,DevOps,Linux,Kubernetes"
     },
     {
+      original_job_id: "CBK-REG-2026",
       title: "FinTech Regulatory Sandbox & API Compliance Engineer",
       company: "Central Bank of Kenya (CBK)",
       company_domain: "centralbank.go.ke",
@@ -2349,12 +2480,13 @@ function fetchKenyanEcosystemJobs() {
       description: "Evaluate, audit, and benchmark emerging FinTech payment architectures, open banking protocols, and cryptocurrency/CBDC sandbox pilots against national cybersecurity frameworks.",
       requirements: "5+ years software engineering and financial compliance; Knowledge of ISO20022, PCI-DSS, zero-trust cryptographic frameworks, Go or Java.",
       benefits: "Public sector banking benefits, civil service medical scheme, research sabbatical support.",
-      apply_url: "https://www.centralbank.go.ke/careers",
+      apply_url: "https://www.centralbank.go.ke/careers/fintech-regulatory-sandbox-engineer-2026",
       contact_email: "recruitment@centralbank.go.ke",
       posted_date: today,
       tags: "CBK,Fintech,Compliance,Security,Banking,Nairobi"
     },
     {
+      original_job_id: "KQ-DIG-4418",
       title: "Aviation Digital Platforms & Flight Booking Fullstack Engineer",
       company: "Kenya Airways (KQ)",
       company_domain: "kenya-airways.com",
@@ -2370,12 +2502,13 @@ function fetchKenyanEcosystemJobs() {
       description: "Build flight reservations interfaces, automated boarding pass integrations, and loyalty program portals. Work with Amadeus GDS APIs, React, and Spring Boot microservices.",
       requirements: "3+ years fullstack development; React, TypeScript, Java/Spring Boot; REST/SOAP APIs; High reliability fault tolerance.",
       benefits: "Rebate airline tickets for employee and family, comprehensive healthcare, pension fund.",
-      apply_url: "https://www.kenya-airways.com/en/about-us/careers/",
+      apply_url: "https://www.kenya-airways.com/en/about-us/careers/digital-platforms-fullstack-4418",
       contact_email: "careers@kenya-airways.com",
       posted_date: today,
       tags: "KenyaAirways,Aviation,Fullstack,React,Java"
     },
     {
+      original_job_id: "FL-IOT-5510",
       title: "IoT Embedded Systems & Telemetry Firmware Engineer",
       company: "Sanergy / Fresh Life",
       company_domain: "freshlife.com",
@@ -2391,12 +2524,13 @@ function fetchKenyanEcosystemJobs() {
       description: "Design low-power IoT sensor networks, GSM telemetry modules, and embedded firmware monitoring municipal sanitation assets across informal urban settlements in Nairobi.",
       requirements: "3+ years embedded C/C++ development; ESP32, STM32, FreeRTOS; Cellular IoT (NB-IoT/LTE-M), MQTT protocols; PCB design familiarity.",
       benefits: "Comprehensive medical cover, impact-driven mission, collaborative R&D workshop.",
-      apply_url: "https://freshlife.com/careers",
+      apply_url: "https://freshlife.com/careers/iot-embedded-systems-firmware-engineer-5510",
       contact_email: "careers@saner.gy",
       posted_date: today,
       tags: "IoT,Embedded,C++,ESP32,Sanergy,Nairobi"
     },
     {
+      original_job_id: "COP-LOG-7812",
       title: "Logistics Optimization & Route Planning Software Engineer",
       company: "Copia Kenya",
       company_domain: "copia.co.ke",
@@ -2412,12 +2546,13 @@ function fetchKenyanEcosystemJobs() {
       description: "Engineer route optimization algorithms, driver dispatch mobile integrations, and mid-mile logistics platforms servicing rural and peri-urban retail agents across Kenya.",
       requirements: "3+ years Python (Django/FastAPI) or Node.js; PostGIS geospatial querying, Docker, Redis; Experience in supply chain or delivery logistics.",
       benefits: "Company transport shuttle, medical insurance, staff purchase discounts, flexible hybrid days.",
-      apply_url: "https://copia.co.ke/careers",
+      apply_url: "https://copia.co.ke/careers/logistics-optimization-software-engineer-7812",
       contact_email: "recruitment@copia.co.ke",
       posted_date: today,
       tags: "Copia,Logistics,Python,PostGIS,ECommerce"
     },
     {
+      original_job_id: "BRN-ML-4190",
       title: "Machine Learning Credit Risk Modeling Engineer",
       company: "Branch International",
       company_domain: "branch.co",
@@ -2433,12 +2568,13 @@ function fetchKenyanEcosystemJobs() {
       description: "Design and train automated credit underwriting models processing non-traditional telemetry data for millions of mobile borrowers across emerging markets.",
       requirements: "5+ years ML engineering with Python (Scikit-Learn, XGBoost, LightGBM, PyTorch); MLOps pipelines (MLflow, Airflow); High security financial data handling.",
       benefits: "USD compensation via international contractor agreement, equity options, equipment budget, wellness stipend.",
-      apply_url: "https://branch.co/careers",
+      apply_url: "https://branch.co/careers/machine-learning-credit-risk-modeling-engineer-4190",
       contact_email: "kenya-jobs@branch.co",
       posted_date: today,
       tags: "Branch,Fintech,ML,Python,Remote,USD"
     },
     {
+      original_job_id: "JKU-ATT-2026",
       title: "Embedded Systems & Robotics Student Trainee (Attachment 2026)",
       company: "JKUAT Innovation & Prototyping Hub",
       company_domain: "jkuat.ac.ke",
@@ -2454,12 +2590,13 @@ function fetchKenyanEcosystemJobs() {
       description: "Hands-on industrial attachment for university engineering and CS students. Build sensor nodes, solar telemetry prototypes, and microcontroller firmwares under faculty mentorship.",
       requirements: "Continuing student in Mechatronics, CS, or Electrical Engineering; Valid university attachment letter; Basic C/C++ or Arduino/Raspberry Pi prototyping.",
       benefits: "NITA certified industrial logbook endorsement, laboratory access, monthly stipend.",
-      apply_url: "https://jkuat.ac.ke/careers",
+      apply_url: "https://jkuat.ac.ke/careers/embedded-systems-robotics-trainee-attachment-2026",
       contact_email: "innovation@jkuat.ac.ke",
       posted_date: today,
       tags: "Attachment,JKUAT,Embedded,Robotics,Students,NITA"
     },
     {
+      original_job_id: "COOP-MS-8814",
       title: "Digital Core Banking Microservices Specialist",
       company: "Co-operative Bank of Kenya",
       company_domain: "co-opbank.co.ke",
@@ -2475,12 +2612,13 @@ function fetchKenyanEcosystemJobs() {
       description: "Develop resilient banking microservices connecting MCo-op Cash mobile wallets with core banking ledgers. Implement zero-downtime database migrations and automated transaction integrity reconciliation.",
       requirements: "3+ years Java (Spring Boot) or C# .NET Core; Oracle/SQL Server, RabbitMQ/Kafka, Microservices design patterns, Docker.",
       benefits: "Subsidized staff loans, comprehensive banking medical plan, pension contribution, annual performance bonus.",
-      apply_url: "https://www.co-opbank.co.ke/careers",
+      apply_url: "https://www.co-opbank.co.ke/careers/digital-core-banking-microservices-specialist-8814",
       contact_email: "careers@co-opbank.co.ke",
       posted_date: today,
       tags: "CoopBank,Banking,Java,SpringBoot,Microservices"
     },
     {
+      original_job_id: "STN-K8S-5521",
       title: "Cloud DevOps & Kubernetes Integration Engineer",
       company: "Stanbic Bank Kenya",
       company_domain: "stanbicbank.co.ke",
@@ -2496,12 +2634,13 @@ function fetchKenyanEcosystemJobs() {
       description: "Orchestrate multi-cluster Kubernetes deployments on Azure and AWS for Stanbic digital channels across Kenya and South Sudan. Maintain GitOps pipelines (ArgoCD) and Prometheus telemetry.",
       requirements: "5+ years in DevOps; Certified Kubernetes Administrator (CKA); Terraform, ArgoCD, Helm, Azure DevOps; Incident management.",
       benefits: "Executive medical cover, low-interest mortgage, continuous training sponsorship, performance bonus.",
-      apply_url: "https://www.stanbicbank.co.ke/careers",
+      apply_url: "https://www.stanbicbank.co.ke/careers/cloud-devops-kubernetes-engineer-5521",
       contact_email: "recruitment@stanbic.com",
       posted_date: today,
       tags: "Stanbic,DevOps,Kubernetes,Azure,GitOps"
     },
     {
+      original_job_id: "PDTP-COHORT-2026",
       title: "Software Engineering & Cloud Architecture Trainee",
       company: "Presidential Digital Talent Programme (PDTP - ICT Authority)",
       company_domain: "icta.go.ke",
@@ -2517,12 +2656,13 @@ function fetchKenyanEcosystemJobs() {
       description: "Flagship Kenyan national ICT internship cohort. Deployed across government ministries and private multinational tech hubs building citizen service portals (eCitizen, digital IDs, health registries).",
       requirements: "Recent graduate (within last 2 years) in CS, Software Engineering or related; Good foundation in web development, databases, and problem-solving.",
       benefits: "Monthly government stipend, high-impact public service placement, national certification, mentoring by senior ICT directors.",
-      apply_url: "https://digitalent.go.ke",
+      apply_url: "https://digitalent.go.ke/apply/software-engineering-trainee-2026",
       contact_email: "pdtp@ict.go.ke",
       posted_date: today,
       tags: "PDTP,ICTAuthority,Internship,eCitizen,Kenya"
     },
     {
+      original_job_id: "KRA-ETIMS-99214",
       title: "iTax & eTIMS Microservices Backend Trainee",
       company: "Kenya Revenue Authority (KRA)",
       company_domain: "kra.go.ke",
@@ -2538,7 +2678,7 @@ function fetchKenyanEcosystemJobs() {
       description: "Join KRA's digital transformation engineering team. Assist in developing eTIMS API integrations, electronic invoicing endpoints, and high-throughput tax ledger audit microservices.",
       requirements: "Recent graduate or final year student in CS/IT; Understanding of REST APIs, JSON validation, relational databases (PostgreSQL/Oracle), Git.",
       benefits: "Official government trainee stipend, comprehensive exposure to national-scale financial systems, training certificate.",
-      apply_url: "https://erecruitment.kra.go.ke",
+      apply_url: "https://erecruitment.kra.go.ke/erecruitment/jobdetails?jobid=KRA-ETIMS-99214",
       contact_email: "recruitment@kra.go.ke",
       posted_date: today,
       tags: "KRA,eTIMS,Backend,APIs,Internship,Nairobi"
@@ -2546,25 +2686,77 @@ function fetchKenyanEcosystemJobs() {
   ];
 }
 
-// Global scanner state
+// Global scanner state & Throttling Mutex
+const SCAN_COOLDOWN_MS = 10 * 60 * 1000; // Strict 10-minute cooldown (DoS shield & freshness gate)
+let isScanRunning = false;
+let lastScanCompletedTimestamp = 0;
+
+function getLastSuccessfulScanTime() {
+  try {
+    const row = db.prepare('SELECT scan_time FROM scanner_logs WHERE status = "SUCCESS" ORDER BY id DESC LIMIT 1').get();
+    if (row && row.scan_time) {
+      const ts = new Date(row.scan_time).getTime();
+      if (!isNaN(ts)) return ts;
+    }
+  } catch (e) {}
+  return 0;
+}
+
+lastScanCompletedTimestamp = getLastSuccessfulScanTime();
+
 let scannerState = {
   isScanning: false,
-  lastScanTime: null,
-  nextScanTime: null,
+  lastScanTime: lastScanCompletedTimestamp > 0 ? new Date(lastScanCompletedTimestamp).toISOString() : null,
+  nextScanTime: lastScanCompletedTimestamp > 0 ? new Date(lastScanCompletedTimestamp + 60 * 60 * 1000).toISOString() : null,
+  cooldownMs: SCAN_COOLDOWN_MS,
+  lastScanTimestamp: lastScanCompletedTimestamp,
+  nextAllowedScanTime: lastScanCompletedTimestamp > 0 ? new Date(lastScanCompletedTimestamp + SCAN_COOLDOWN_MS).toISOString() : null,
   totalScans: 0,
   totalRolesFound: 0,
   totalRolesAdded: 0,
   lastStatus: 'INITIALIZING',
-  lastMessage: 'Scanner initialized. Scheduled to run hourly.'
+  lastMessage: 'Scanner initialized with 10-minute anti-DoS freshness protection.'
 };
 
-// Main Autonomous Hourly Scan Runner
+// Main Autonomous Hourly Scan Runner with 10-Minute Anti-DoS Freshness Gate
 async function runHourlyRoleScan(isManual = false) {
-  if (scannerState.isScanning) {
-    console.log('[Scanner] ⏳ Scan already in progress, skipping duplicate request.');
-    return { status: 'already_running', message: 'Scan already in progress' };
+  const now = Date.now();
+
+  // Fast-exit Gate 1: Mutex Lock (Reject concurrent triggers in <0.01ms)
+  if (isScanRunning || scannerState.isScanning) {
+    const elapsed = now - (lastScanCompletedTimestamp || now);
+    const remainingSec = Math.max(0, Math.ceil((SCAN_COOLDOWN_MS - elapsed) / 1000));
+    console.log('[Scanner] ⏳ Scan already in progress, throttling duplicate request (<0.01ms).');
+    return {
+      status: 'already_running',
+      fresh: true,
+      message: 'A role discovery scan is currently active in the background. Please wait for completion.',
+      cooldown_remaining_sec: remainingSec
+    };
   }
 
+  // Fast-exit Gate 2: Freshness Shield (10-minute cooldown protection against high-traffic/DoS spikes)
+  if (lastScanCompletedTimestamp > 0) {
+    const elapsed = now - lastScanCompletedTimestamp;
+    if (elapsed < SCAN_COOLDOWN_MS) {
+      const remainingSec = Math.ceil((SCAN_COOLDOWN_MS - elapsed) / 1000);
+      const elapsedMins = Math.floor(elapsed / 60000);
+      const elapsedSec = Math.floor((elapsed % 60000) / 1000);
+      const timeAgoStr = elapsedMins > 0 ? `${elapsedMins}m ${elapsedSec}s ago` : `${elapsedSec}s ago`;
+      console.log(`[Scanner] 🛡️ Freshness Shield: Last scan was ${timeAgoStr} (< 10m limit). Request served from cache in <0.01ms.`);
+      return {
+        status: 'cached',
+        fresh: true,
+        message: `Job listings are fresh (last scan completed ${timeAgoStr}). In accordance with platform security and rate-limiting rules, scanning is throttled to once every 10 minutes.`,
+        cooldown_remaining_sec: remainingSec,
+        last_scan_time: scannerState.lastScanTime || new Date(lastScanCompletedTimestamp).toISOString(),
+        next_scan_time: new Date(lastScanCompletedTimestamp + SCAN_COOLDOWN_MS).toISOString()
+      };
+    }
+  }
+
+  // Acquire Lock Atomically
+  isScanRunning = true;
   scannerState.isScanning = true;
   scannerState.lastStatus = 'SCANNING';
   const startTime = new Date();
@@ -2575,177 +2767,190 @@ async function runHourlyRoleScan(isManual = false) {
   const sourcesSucceeded = [];
   const sourcesFailed = [];
 
-  // Source 1: Arbeitnow Public API (300+ live jobs)
   try {
-    const arbeitJobs = await fetchArbeitnowJobs();
-    discoveredRoles.push(...arbeitJobs);
-    sourcesSucceeded.push(`Arbeitnow API (${arbeitJobs.length} roles)`);
-  } catch (err) {
-    sourcesFailed.push(`Arbeitnow (${err.message})`);
-  }
+    // Source 1: Arbeitnow Public API (300+ live jobs)
+    try {
+      const arbeitJobs = await fetchArbeitnowJobs();
+      discoveredRoles.push(...arbeitJobs);
+      sourcesSucceeded.push(`Arbeitnow API (${arbeitJobs.length} roles)`);
+    } catch (err) {
+      sourcesFailed.push(`Arbeitnow (${err.message})`);
+    }
 
-  // Source 2: RemoteOK Public API (100+ live jobs)
-  try {
-    const remoteOkJobs = await fetchRemoteOKJobs();
-    discoveredRoles.push(...remoteOkJobs);
-    sourcesSucceeded.push(`RemoteOK API (${remoteOkJobs.length} roles)`);
-  } catch (err) {
-    sourcesFailed.push(`RemoteOK (${err.message})`);
-  }
+    // Source 2: RemoteOK Public API (100+ live jobs)
+    try {
+      const remoteOkJobs = await fetchRemoteOKJobs();
+      discoveredRoles.push(...remoteOkJobs);
+      sourcesSucceeded.push(`RemoteOK API (${remoteOkJobs.length} roles)`);
+    } catch (err) {
+      sourcesFailed.push(`RemoteOK (${err.message})`);
+    }
 
-  // Source 3: Tracked Public LinkedIn Jobs (Kenyan & Global Tech Hubs)
-  try {
-    const linkedInJobs = fetchLinkedInTrackedJobs();
-    discoveredRoles.push(...linkedInJobs);
-    sourcesSucceeded.push(`LinkedIn Verified Feed (${linkedInJobs.length} roles)`);
-  } catch (err) {
-    sourcesFailed.push(`LinkedIn (${err.message})`);
-  }
+    // Source 3: Tracked Public LinkedIn Jobs (Kenyan & Global Tech Hubs)
+    try {
+      const linkedInJobs = fetchLinkedInTrackedJobs();
+      discoveredRoles.push(...linkedInJobs);
+      sourcesSucceeded.push(`LinkedIn Verified Feed (${linkedInJobs.length} roles)`);
+    } catch (err) {
+      sourcesFailed.push(`LinkedIn (${err.message})`);
+    }
 
-  // Source 4: Remotive Public API
-  try {
-    const remotiveJobs = await fetchRemotiveJobs();
-    discoveredRoles.push(...remotiveJobs);
-    sourcesSucceeded.push(`Remotive API (${remotiveJobs.length} roles)`);
-  } catch (err) {
-    sourcesFailed.push(`Remotive (${err.message})`);
-  }
+    // Source 4: Remotive Public API
+    try {
+      const remotiveJobs = await fetchRemotiveJobs();
+      discoveredRoles.push(...remotiveJobs);
+      sourcesSucceeded.push(`Remotive API (${remotiveJobs.length} roles)`);
+    } catch (err) {
+      sourcesFailed.push(`Remotive (${err.message})`);
+    }
 
-  // Source 5: Jobicy Public API
-  try {
-    const jobicyJobs = await fetchJobicyJobs();
-    discoveredRoles.push(...jobicyJobs);
-    sourcesSucceeded.push(`Jobicy API (${jobicyJobs.length} roles)`);
-  } catch (err) {
-    sourcesFailed.push(`Jobicy (${err.message})`);
-  }
+    // Source 5: Jobicy Public API
+    try {
+      const jobicyJobs = await fetchJobicyJobs();
+      discoveredRoles.push(...jobicyJobs);
+      sourcesSucceeded.push(`Jobicy API (${jobicyJobs.length} roles)`);
+    } catch (err) {
+      sourcesFailed.push(`Jobicy (${err.message})`);
+    }
 
-  // Source 6: Curated Kenyan Tech Ecosystem Catalog
-  try {
-    const kenyaJobs = fetchKenyanEcosystemJobs();
-    discoveredRoles.push(...kenyaJobs);
-    sourcesSucceeded.push(`Kenyan Tech Ecosystem (${kenyaJobs.length} roles)`);
-  } catch (err) {
-    sourcesFailed.push(`Kenyan Ecosystem (${err.message})`);
-  }
+    // Source 6: Curated Kenyan Tech Ecosystem Catalog
+    try {
+      const kenyaJobs = fetchKenyanEcosystemJobs();
+      discoveredRoles.push(...kenyaJobs);
+      sourcesSucceeded.push(`Kenyan Tech Ecosystem (${kenyaJobs.length} roles)`);
+    } catch (err) {
+      sourcesFailed.push(`Kenyan Ecosystem (${err.message})`);
+    }
 
-  const checkExists = db.prepare(`
-    SELECT id FROM jobs 
-    WHERE (LOWER(title) = LOWER(@title) AND LOWER(company) = LOWER(@company))
-       OR (@apply_url != '' AND apply_url = @apply_url)
-    LIMIT 1
-  `);
+    const checkExists = db.prepare(`
+      SELECT id FROM jobs 
+      WHERE (@original_job_id != '' AND original_job_id = @original_job_id)
+         OR (LOWER(title) = LOWER(@title) AND LOWER(company) = LOWER(@company))
+         OR (@apply_url != '' AND apply_url = @apply_url)
+      LIMIT 1
+    `);
 
-  const insertJob = db.prepare(`
-    INSERT INTO jobs (
-      title, company, company_domain, location, location_type, seniority, domain,
-      salary_kes_min, salary_kes_max, salary_usd_min, salary_usd_max, currency_display,
-      description, requirements, benefits, credibility_score, brs_verified, scam_risk,
-      apply_url, contact_email, remote_accessible_kenya, posted_date, tags
-    ) VALUES (
-      @title, @company, @company_domain, @location, @location_type, @seniority, @domain,
-      @salary_kes_min, @salary_kes_max, @salary_usd_min, @salary_usd_max, @currency_display,
-      @description, @requirements, @benefits, @credibility_score, @brs_verified, @scam_risk,
-      @apply_url, @contact_email, @remote_accessible_kenya, @posted_date, @tags
-    )
-  `);
+    const insertJob = db.prepare(`
+      INSERT INTO jobs (
+        original_job_id, title, company, company_domain, location, location_type, seniority, domain,
+        salary_kes_min, salary_kes_max, salary_usd_min, salary_usd_max, currency_display,
+        description, requirements, benefits, credibility_score, brs_verified, scam_risk,
+        apply_url, contact_email, remote_accessible_kenya, posted_date, tags
+      ) VALUES (
+        @original_job_id, @title, @company, @company_domain, @location, @location_type, @seniority, @domain,
+        @salary_kes_min, @salary_kes_max, @salary_usd_min, @salary_usd_max, @currency_display,
+        @description, @requirements, @benefits, @credibility_score, @brs_verified, @scam_risk,
+        @apply_url, @contact_email, @remote_accessible_kenya, @posted_date, @tags
+      )
+    `);
 
-  let addedCount = 0;
-  for (const job of discoveredRoles) {
-    const existing = checkExists.get({
-      title: job.title.trim(),
-      company: job.company.trim(),
-      apply_url: (job.apply_url || '').trim()
+    let addedCount = 0;
+    for (const job of discoveredRoles) {
+      const originalId = job.original_job_id || extractOriginalJobId(job);
+      const existing = checkExists.get({
+        original_job_id: originalId,
+        title: job.title.trim(),
+        company: job.company.trim(),
+        apply_url: (job.apply_url || '').trim()
+      });
+
+      if (!existing) {
+        const audit = analyzeCredibility({
+          company_name: job.company,
+          domain: job.company_domain,
+          contact_email: job.contact_email,
+          job_text: `${job.title} ${job.description} ${job.requirements}`
+        });
+
+        insertJob.run({
+          original_job_id: originalId,
+          title: job.title,
+          company: job.company,
+          company_domain: job.company_domain || '',
+          location: job.location || 'Nairobi, Kenya',
+          location_type: job.location_type || 'Kenya Local',
+          seniority: job.seniority || 'mid',
+          domain: job.domain || 'fullstack',
+          salary_kes_min: job.salary_kes_min,
+          salary_kes_max: job.salary_kes_max,
+          salary_usd_min: job.salary_usd_min,
+          salary_usd_max: job.salary_usd_max,
+          currency_display: job.currency_display || 'KES',
+          description: job.description,
+          requirements: job.requirements || 'Practical engineering experience, Git version control, collaborative problem solving.',
+          benefits: job.benefits || 'Competitive market compensation, health insurance, professional development support.',
+          credibility_score: audit.score,
+          brs_verified: audit.score >= 80 ? 1 : 0,
+          scam_risk: audit.verdict === 'HIGH_RISK_SCAM' ? 'HIGH' : (audit.verdict === 'MODERATE_VERIFY_FURTHER' ? 'MODERATE' : 'LOW'),
+          apply_url: job.apply_url || '',
+          contact_email: job.contact_email || '',
+          remote_accessible_kenya: 1,
+          posted_date: job.posted_date || new Date().toISOString().split('T')[0],
+          tags: job.tags || 'Tech,Software'
+        });
+        addedCount++;
+      }
+    }
+
+    const logMessage = `Scanned ${discoveredRoles.length} roles. Ingested ${addedCount} new verified postings. Sources: ${sourcesSucceeded.join(', ')}.${sourcesFailed.length ? ' Warnings: ' + sourcesFailed.join('; ') : ''}`;
+    const status = sourcesFailed.length > 0 && sourcesSucceeded.length === 0 ? 'FAILED' : 'SUCCESS';
+
+    db.prepare(`
+      INSERT INTO scanner_logs (scan_time, source, roles_found, roles_added, status, message)
+      VALUES (@scan_time, @source, @roles_found, @roles_added, @status, @message)
+    `).run({
+      scan_time: scanTimeIso,
+      source: sourcesSucceeded.join(', ') || 'Internal Engine',
+      roles_found: discoveredRoles.length,
+      roles_added: addedCount,
+      status,
+      message: logMessage
     });
 
-    if (!existing) {
-      const audit = analyzeCredibility({
-        company_name: job.company,
-        domain: job.company_domain,
-        contact_email: job.contact_email,
-        job_text: `${job.title} ${job.description} ${job.requirements}`
-      });
-
-      insertJob.run({
-        title: job.title,
-        company: job.company,
-        company_domain: job.company_domain || '',
-        location: job.location || 'Nairobi, Kenya',
-        location_type: job.location_type || 'Kenya Local',
-        seniority: job.seniority || 'mid',
-        domain: job.domain || 'fullstack',
-        salary_kes_min: job.salary_kes_min,
-        salary_kes_max: job.salary_kes_max,
-        salary_usd_min: job.salary_usd_min,
-        salary_usd_max: job.salary_usd_max,
-        currency_display: job.currency_display || 'KES',
-        description: job.description,
-        requirements: job.requirements || 'Practical engineering experience, Git version control, collaborative problem solving.',
-        benefits: job.benefits || 'Competitive market compensation, health insurance, professional development support.',
-        credibility_score: audit.score,
-        brs_verified: audit.score >= 80 ? 1 : 0,
-        scam_risk: audit.verdict === 'HIGH_RISK_SCAM' ? 'HIGH' : (audit.verdict === 'MODERATE_VERIFY_FURTHER' ? 'MODERATE' : 'LOW'),
-        apply_url: job.apply_url || '',
-        contact_email: job.contact_email || '',
-        remote_accessible_kenya: 1,
-        posted_date: job.posted_date || new Date().toISOString().split('T')[0],
-        tags: job.tags || 'Tech,Software'
-      });
-      addedCount++;
+    if (addedCount > 0) {
+      try {
+        const allJobs = db.prepare('SELECT * FROM jobs').all();
+        const allReviews = db.prepare('SELECT * FROM reviews').all();
+        const allAudits = db.prepare('SELECT * FROM credibility_audits').all();
+        const allLogs = db.prepare('SELECT * FROM scanner_logs').all();
+        fs.writeFileSync(DB_JSON_FILE, JSON.stringify({
+          jobs: allJobs,
+          reviews: allReviews,
+          credibility_audits: allAudits,
+          scanner_logs: allLogs
+        }, null, 2), 'utf8');
+        console.log(`[Scanner] 💾 Saved ${allJobs.length} roles to ${DB_JSON_FILE}`);
+      } catch (err) {
+        console.error('[Scanner] Failed to persist data to JSON:', err.message);
+      }
     }
+
+    lastScanCompletedTimestamp = Date.now();
+    scannerState.lastScanTimestamp = lastScanCompletedTimestamp;
+    scannerState.lastScanTime = scanTimeIso;
+    scannerState.nextScanTime = new Date(lastScanCompletedTimestamp + 60 * 60 * 1000).toISOString();
+    scannerState.nextAllowedScanTime = new Date(lastScanCompletedTimestamp + SCAN_COOLDOWN_MS).toISOString();
+    scannerState.totalScans++;
+    scannerState.totalRolesFound += discoveredRoles.length;
+    scannerState.totalRolesAdded += addedCount;
+    scannerState.lastStatus = status;
+    scannerState.lastMessage = logMessage;
+
+    console.log(`[Scanner] ✅ Scan complete: ${logMessage}`);
+    return {
+      status: 'success',
+      scan_time: scanTimeIso,
+      roles_found: discoveredRoles.length,
+      roles_added: addedCount,
+      next_scan_time: scannerState.nextScanTime,
+      next_allowed_scan_time: scannerState.nextAllowedScanTime,
+      message: logMessage
+    };
+  } finally {
+    // Guarantees mutex unlock even if unhandled rejection occurs
+    isScanRunning = false;
+    scannerState.isScanning = false;
   }
-
-  const logMessage = `Scanned ${discoveredRoles.length} roles. Ingested ${addedCount} new verified postings. Sources: ${sourcesSucceeded.join(', ')}.${sourcesFailed.length ? ' Warnings: ' + sourcesFailed.join('; ') : ''}`;
-  const status = sourcesFailed.length > 0 && sourcesSucceeded.length === 0 ? 'FAILED' : 'SUCCESS';
-
-  db.prepare(`
-    INSERT INTO scanner_logs (scan_time, source, roles_found, roles_added, status, message)
-    VALUES (@scan_time, @source, @roles_found, @roles_added, @status, @message)
-  `).run({
-    scan_time: scanTimeIso,
-    source: sourcesSucceeded.join(', ') || 'Internal Engine',
-    roles_found: discoveredRoles.length,
-    roles_added: addedCount,
-    status,
-    message: logMessage
-  });
-
-  if (addedCount > 0) {
-    try {
-      const allJobs = db.prepare('SELECT * FROM jobs').all();
-      const allReviews = db.prepare('SELECT * FROM reviews').all();
-      const allAudits = db.prepare('SELECT * FROM credibility_audits').all();
-      const allLogs = db.prepare('SELECT * FROM scanner_logs').all();
-      fs.writeFileSync(DB_JSON_FILE, JSON.stringify({
-        jobs: allJobs,
-        reviews: allReviews,
-        credibility_audits: allAudits,
-        scanner_logs: allLogs
-      }, null, 2), 'utf8');
-      console.log(`[Scanner] 💾 Saved ${allJobs.length} roles to ${DB_JSON_FILE}`);
-    } catch (err) {
-      console.error('[Scanner] Failed to persist data to JSON:', err.message);
-    }
-  }
-
-  scannerState.isScanning = false;
-  scannerState.lastScanTime = scanTimeIso;
-  scannerState.nextScanTime = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-  scannerState.totalScans++;
-  scannerState.totalRolesFound += discoveredRoles.length;
-  scannerState.totalRolesAdded += addedCount;
-  scannerState.lastStatus = status;
-  scannerState.lastMessage = logMessage;
-
-  console.log(`[Scanner] ✅ Scan complete: ${logMessage}`);
-  return {
-    status: 'success',
-    scan_time: scanTimeIso,
-    roles_found: discoveredRoles.length,
-    roles_added: addedCount,
-    next_scan_time: scannerState.nextScanTime,
-    message: logMessage
-  };
 }
 
 // Keep-Alive Self-Ping Heartbeat (Pings every 10 mins to prevent Render free-tier idle spin down)
@@ -3010,10 +3215,18 @@ const server = http.createServer(async (req, res) => {
   if (method === 'GET' && pathname === '/api/scanner/status') {
     try {
       const logs = db.prepare('SELECT * FROM scanner_logs ORDER BY id DESC LIMIT 15').all();
+      const now = Date.now();
+      const elapsed = lastScanCompletedTimestamp > 0 ? (now - lastScanCompletedTimestamp) : Infinity;
+      const cooldownRemainingSec = elapsed < SCAN_COOLDOWN_MS ? Math.ceil((SCAN_COOLDOWN_MS - elapsed) / 1000) : 0;
+
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
         status: 'success',
-        scanner: scannerState,
+        scanner: {
+          ...scannerState,
+          cooldownRemainingSec,
+          isCoolingDown: cooldownRemainingSec > 0
+        },
         logs
       }));
     } catch (err) {

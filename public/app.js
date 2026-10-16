@@ -429,6 +429,7 @@ function cleanText(str) {
             <span class="job-date-badge ${dateInfo.badgeClass}" title="Posted on ${dateInfo.fullDate}">
               <i class="${dateInfo.icon}"></i> ${dateInfo.label}
             </span>
+            ${job.original_job_id ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-surface-800 text-brand-700 border border-brand-300/80 shadow-2xs" title="Official Employer Requisition ID"><i class="fa-solid fa-fingerprint text-brand-600"></i> #${job.original_job_id}</span>` : ''}
           </div>
           ${credibilityBadge}
         </div>
@@ -521,10 +522,13 @@ function openJobDetail(id) {
 
   container.innerHTML = `
     <div>
-      <div class="flex items-center justify-between gap-2 mb-2">
-        <span class="px-2.5 py-1 rounded text-xs font-mono font-bold badge-${job.seniority}">
-          ${job.seniority.toUpperCase()} ROLE
-        </span>
+      <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="px-2.5 py-1 rounded text-xs font-mono font-bold badge-${job.seniority}">
+            ${job.seniority.toUpperCase()} ROLE
+          </span>
+          ${job.original_job_id ? `<span class="px-2.5 py-1 rounded text-xs font-mono font-bold bg-surface-800 text-brand-300 border border-brand-500/40 shadow-2xs"><i class="fa-solid fa-fingerprint text-brand-400 mr-1"></i> Req ID: #${job.original_job_id}</span>` : ''}
+        </div>
         <span class="text-xs font-mono ${isScam ? 'text-rose-400 font-bold' : 'text-emerald-400'}">
           Credibility Trust Index: ${job.credibility_score} / 100
         </span>
@@ -1048,6 +1052,17 @@ async function loadScannerStatus() {
         statusTextEl.className = 'text-sky-700 font-semibold animate-pulse';
       }
       if (lastSyncEl) lastSyncEl.textContent = 'In progress';
+    } else if (scanner.isCoolingDown && scanner.cooldownRemainingSec > 0) {
+      const mins = Math.floor(scanner.cooldownRemainingSec / 60);
+      const secs = scanner.cooldownRemainingSec % 60;
+      const cdStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+      if (statusTextEl) {
+        statusTextEl.textContent = `Shield Active (${cdStr} cooldown)`;
+        statusTextEl.className = 'text-amber-700 font-semibold';
+      }
+      if (lastSyncEl) {
+        lastSyncEl.textContent = `Data Fresh • Last run: ${formatTimeAgo(scanner.lastScanTime)}`;
+      }
     } else {
       if (statusTextEl) {
         statusTextEl.textContent = 'Active (Hourly)';
@@ -1136,6 +1151,15 @@ async function triggerManualScan() {
     if (data.status === 'success') {
       alert(`✅ Hourly Scanner Complete!\n\n${data.roles_found} roles evaluated across Remotive, Jobicy & Kenyan tech feeds.\n${data.roles_added} new verified roles added to DEV CORE KE.\nNext automated scan scheduled for: ${new Date(data.next_scan_time).toLocaleTimeString()}`);
       loadJobs();
+      loadScannerStatus();
+    } else if (data.status === 'cached') {
+      const waitMins = Math.floor(data.cooldown_remaining_sec / 60);
+      const waitSecs = data.cooldown_remaining_sec % 60;
+      const waitStr = waitMins > 0 ? `${waitMins}m ${waitSecs}s` : `${waitSecs}s`;
+      alert(`🛡️ Fresh Listings Shield Active (10-Min Limit)\n\nJob listings are fresh and fully synchronized.\nTo prevent upstream rate limits and guard against DoS attacks, scanning is throttled to once every 10 minutes.\n\nNext scan available in: ${waitStr}`);
+      loadScannerStatus();
+    } else if (data.status === 'already_running') {
+      alert(`⏳ Scanner In Progress\n\n${data.message || 'A role discovery scan is currently active in the background. Please wait for it to finish.'}`);
       loadScannerStatus();
     } else {
       alert(data.message || 'Scan was already running or encountered a minor issue.');

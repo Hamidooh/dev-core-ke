@@ -419,7 +419,18 @@
       try {
         const res = await fetch('/api/scanner/trigger', { method: 'POST' });
         const data = await res.json();
-        alert(`Role Scanner Complete!\nScanned: ${data.scanned_count} roles\nNew Verified Roles Added: ${data.added_count}`);
+        if (data.status === 'success') {
+          alert(`✅ Role Scanner Complete!\nScanned: ${data.roles_found || data.scanned_count || 0} roles\nNew Verified Roles Added: ${data.roles_added || data.added_count || 0}`);
+        } else if (data.status === 'cached') {
+          const waitMins = Math.floor(data.cooldown_remaining_sec / 60);
+          const waitSecs = data.cooldown_remaining_sec % 60;
+          const waitStr = waitMins > 0 ? `${waitMins}m ${waitSecs}s` : `${waitSecs}s`;
+          alert(`🛡️ Fresh Listings Shield Active (10-Min Gate)\n\nData is fresh and cached. Scan throttled to prevent upstream API rate-limits.\n\nNext scan available in: ${waitStr}`);
+        } else if (data.status === 'already_running') {
+          alert(`⏳ Scan Active\n\nA scan is already running in the background. Please allow it to finish.`);
+        } else {
+          alert(data.message || 'Scan trigger returned: ' + (data.status || 'unknown'));
+        }
         refreshData();
       } catch (e) {
         alert('Scanner trigger failed: ' + e.message);

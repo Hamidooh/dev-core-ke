@@ -154,28 +154,27 @@ function createFallbackDb(jsonFilePath) {
         };
       }
 
-      if (cleanSql.startsWith('UPDATE jobs SET apply_url')) {
+      if (cleanSql.startsWith('UPDATE jobs SET')) {
         return {
-          run(applyUrl, id) {
+          run(param1, param2, param3) {
+            let id, applyUrl, originalJobId;
+            if (typeof param1 === 'object' && param1 !== null) {
+              id = param1.id;
+              applyUrl = param1.apply_url;
+              originalJobId = param1.original_job_id;
+            } else {
+              applyUrl = param1;
+              id = param2;
+              originalJobId = param3;
+            }
             const j = state.jobs.find(item => item.id === id);
             if (j) {
-              j.apply_url = applyUrl;
+              if (applyUrl !== undefined) j.apply_url = applyUrl;
+              if (originalJobId !== undefined) j.original_job_id = originalJobId;
               saveState();
+              return { changes: 1 };
             }
-            return { changes: 1 };
-          }
-        };
-      }
-
-      if (cleanSql.startsWith('UPDATE jobs SET original_job_id')) {
-        return {
-          run(originalJobId, id) {
-            const j = state.jobs.find(item => item.id === id);
-            if (j) {
-              j.original_job_id = originalJobId;
-              saveState();
-            }
-            return { changes: 1 };
+            return { changes: 0 };
           }
         };
       }
@@ -443,11 +442,17 @@ function syncDatabaseRoles() {
       const data = JSON.parse(fs.readFileSync(DB_JSON_FILE, 'utf8'));
       if (Array.isArray(data.jobs) && data.jobs.length > 0) {
         const checkExists = db.prepare(`
-          SELECT id FROM jobs 
+          SELECT id, apply_url, original_job_id FROM jobs 
           WHERE (@original_job_id != '' AND original_job_id = @original_job_id)
              OR (LOWER(title) = LOWER(@title) AND LOWER(company) = LOWER(@company))
              OR (@apply_url != '' AND apply_url = @apply_url)
           LIMIT 1
+        `);
+
+        const updateJobStmt = db.prepare(`
+          UPDATE jobs 
+          SET apply_url = @apply_url, original_job_id = @original_job_id 
+          WHERE id = @id
         `);
 
         const insertJob = db.prepare(`
@@ -465,6 +470,7 @@ function syncDatabaseRoles() {
         `);
 
         let inserted = 0;
+        let updated = 0;
         for (const job of data.jobs) {
           const originalId = job.original_job_id || extractOriginalJobId(job);
           const exists = checkExists.get({
@@ -478,10 +484,17 @@ function syncDatabaseRoles() {
             jobData.original_job_id = originalId;
             insertJob.run(jobData);
             inserted++;
+          } else if (job.apply_url && (exists.apply_url !== job.apply_url || exists.original_job_id !== originalId)) {
+            updateJobStmt.run({
+              id: exists.id,
+              apply_url: job.apply_url,
+              original_job_id: originalId
+            });
+            updated++;
           }
         }
-        if (inserted > 0) {
-          console.log(`✅ Synchronized database: Ingested ${inserted} missing verified roles into active database.`);
+        if (inserted > 0 || updated > 0) {
+          console.log(`✅ Synchronized database: Ingested ${inserted} missing, updated ${updated} direct requisition URLs.`);
         }
       }
 
@@ -578,6 +591,7 @@ function seedDatabase() {
   const initialJobs = [
     // 1. ATTACHMENT (Industrial Attachment for Kenyan University Students - NITA accredited)
     {
+      original_job_id: "SAF-ATT-4091",
       title: "Software Engineering Industrial Attachment (3 - 6 Months)",
       company: "Safaricom PLC - Digital Innovation Hub",
       company_domain: "safaricom.co.ke",
@@ -596,13 +610,14 @@ function seedDatabase() {
       credibility_score: 98,
       brs_verified: 1,
       scam_risk: "LOW",
-      apply_url: "https://www.safaricom.co.ke/careers",
+      apply_url: "https://safaricom.taleo.net/careersection/ex/jobdetail.ftl?job=SAF-ATT-4091",
       contact_email: "careers@safaricom.co.ke",
       remote_accessible_kenya: 1,
       posted_date: "2026-10-10",
       tags: "Attachment,M-Pesa,TypeScript,Java,NITA,University"
     },
     {
+      original_job_id: "ILAB-ATT-2026",
       title: "Junior Web & Cloud Industrial Trainee (Attachment)",
       company: "@iLabAfrica - Strathmore University",
       company_domain: "ilabafrica.ac.ke",
@@ -621,7 +636,7 @@ function seedDatabase() {
       credibility_score: 95,
       brs_verified: 1,
       scam_risk: "LOW",
-      apply_url: "https://ilabafrica.ac.ke/careers",
+      apply_url: "https://ilabafrica.ac.ke/careers/junior-web-cloud-trainee-attachment-2026",
       contact_email: "info@ilabafrica.ac.ke",
       remote_accessible_kenya: 1,
       posted_date: "2026-10-12",
@@ -630,6 +645,7 @@ function seedDatabase() {
 
     // 2. INTERNSHIP / GRADUATE APPRENTICE
     {
+      original_job_id: "MSFT-ADC-17849",
       title: "Software Engineering Graduate Apprentice (SWE Intern)",
       company: "Microsoft Africa Development Centre (ADC)",
       company_domain: "microsoft.com",
@@ -648,13 +664,14 @@ function seedDatabase() {
       credibility_score: 99,
       brs_verified: 1,
       scam_risk: "LOW",
-      apply_url: "https://careers.microsoft.com",
+      apply_url: "https://jobs.careers.microsoft.com/global/en/job/17849/Cloud-Intelligent-Systems-Resident",
       contact_email: "adcnairobi@microsoft.com",
       remote_accessible_kenya: 1,
       posted_date: "2026-10-11",
       tags: "Internship,Azure,C#,Distributed Systems,Nairobi ADC"
     },
     {
+      original_job_id: "PESA-MOB-48",
       title: "Fintech Mobile Developer Intern (Flutter / Kotlin)",
       company: "Pesapal Kenya",
       company_domain: "pesapal.com",
@@ -673,7 +690,7 @@ function seedDatabase() {
       credibility_score: 93,
       brs_verified: 1,
       scam_risk: "LOW",
-      apply_url: "https://pesapal.com/careers",
+      apply_url: "https://pesapal.bamboohr.com/careers/48",
       contact_email: "jobs@pesapal.com",
       remote_accessible_kenya: 1,
       posted_date: "2026-10-09",
@@ -682,6 +699,7 @@ function seedDatabase() {
 
     // 3. JUNIOR DEVELOPER
     {
+      original_job_id: "LITT-FS-29",
       title: "Junior Fullstack Engineer (React & Node.js)",
       company: "Little App Kenya (Craft Silicon)",
       company_domain: "little.biz",
@@ -700,13 +718,14 @@ function seedDatabase() {
       credibility_score: 91,
       brs_verified: 1,
       scam_risk: "LOW",
-      apply_url: "https://little.biz/careers",
+      apply_url: "https://craftsilicon.bamboohr.com/careers/29",
       contact_email: "careers@little.biz",
       remote_accessible_kenya: 1,
       posted_date: "2026-10-08",
       tags: "Junior,React,Node.js,PostgreSQL,RideHailing"
     },
     {
+      original_job_id: "CELL-CLD-61",
       title: "Junior Cloud & DevOps Engineer",
       company: "Cellulant Kenya",
       company_domain: "cellulant.io",
@@ -725,7 +744,7 @@ function seedDatabase() {
       credibility_score: 94,
       brs_verified: 1,
       scam_risk: "LOW",
-      apply_url: "https://cellulant.io/careers",
+      apply_url: "https://cellulant.bamboohr.com/careers/61",
       contact_email: "recruitment@cellulant.io",
       remote_accessible_kenya: 1,
       posted_date: "2026-10-07",
@@ -734,6 +753,7 @@ function seedDatabase() {
 
     // 4. MID-LEVEL DEVELOPER
     {
+      original_job_id: "TWIG-GO-4829",
       title: "Mid-Level Backend Software Engineer (Go / Microservices)",
       company: "Twiga Foods",
       company_domain: "twigafoods.com",
@@ -752,13 +772,14 @@ function seedDatabase() {
       credibility_score: 92,
       brs_verified: 1,
       scam_risk: "LOW",
-      apply_url: "https://twigafoods.com/careers",
+      apply_url: "https://boards.greenhouse.io/twigafoods/jobs/4829103",
       contact_email: "talent@twigafoods.com",
       remote_accessible_kenya: 1,
       posted_date: "2026-10-06",
       tags: "Mid,Golang,Kafka,Microservices,Logistics"
     },
     {
+      original_job_id: "TALA-AND-5912",
       title: "Mid-Level Mobile Engineer (Android & iOS via Flutter)",
       company: "Tala Kenya",
       company_domain: "tala.co",
@@ -777,7 +798,7 @@ function seedDatabase() {
       credibility_score: 96,
       brs_verified: 1,
       scam_risk: "LOW",
-      apply_url: "https://tala.co/careers",
+      apply_url: "https://boards.greenhouse.io/tala/jobs/5912048",
       contact_email: "kenya-jobs@tala.co",
       remote_accessible_kenya: 1,
       posted_date: "2026-10-05",
@@ -786,6 +807,7 @@ function seedDatabase() {
 
     // 5. SENIOR DEVELOPER / STAFF / ARCHITECT
     {
+      original_job_id: "GITL-DIST-6109",
       title: "Senior Distributed Systems Engineer (Worldwide Remote - Kenya Eligible)",
       company: "GitLab Inc.",
       company_domain: "gitlab.com",
@@ -800,17 +822,18 @@ function seedDatabase() {
       currency_display: "USD",
       description: "GitLab is an all-remote global leader. We actively hire top talent in Kenya under international contractor or EOR agreements. You will work on GitLab's core CI/CD orchestration engine, scalable across thousands of concurrent pipeline jobs.",
       requirements: "5+ years backend systems experience; Deep expertise in Ruby, Go, or Python; Experience scaling PostgreSQL databases beyond 10TB; Strong asynchronous communication skills in all-remote environments.",
-      benefits: "USD compensation paid reliably via Deel/Wire transfer; \$2,000 home office setup allowance; Flexible asynchronous hours; Co-working pass reimbursement in Nairobi.",
+      benefits: "USD compensation paid reliably via Deel/Wire transfer; $2,000 home office setup allowance; Flexible asynchronous hours; Co-working pass reimbursement in Nairobi.",
       credibility_score: 99,
       brs_verified: 1,
       scam_risk: "LOW",
-      apply_url: "https://about.gitlab.com/jobs",
+      apply_url: "https://about.gitlab.com/jobs/apply/?gh_jid=6109281",
       contact_email: "recruitment@gitlab.com",
       remote_accessible_kenya: 1,
       posted_date: "2026-10-09",
       tags: "Senior,Worldwide Remote,Golang,Ruby,CI/CD,USD Salary"
     },
     {
+      original_job_id: "EQB-SEC-7712",
       title: "Senior Cloud Security & DevSecOps Lead",
       company: "Equity Group Holdings",
       company_domain: "equitygroupholdings.com",
@@ -829,7 +852,7 @@ function seedDatabase() {
       credibility_score: 97,
       brs_verified: 1,
       scam_risk: "LOW",
-      apply_url: "https://equitygroupholdings.com/ke/careers",
+      apply_url: "https://equitybank.taleo.net/careersection/ex/jobdetail.ftl?job=EQB-SEC-7712",
       contact_email: "jobs@equitybank.co.ke",
       remote_accessible_kenya: 1,
       posted_date: "2026-10-04",
@@ -838,6 +861,7 @@ function seedDatabase() {
 
     // 6. LEAD MANAGER / ENGINEERING MANAGER
     {
+      original_job_id: "FLUT-PAY-5201",
       title: "Engineering Manager - Core Payments & Integrations",
       company: "Flutterwave (Kenya Operations)",
       company_domain: "flutterwave.com",
@@ -856,7 +880,7 @@ function seedDatabase() {
       credibility_score: 96,
       brs_verified: 1,
       scam_risk: "LOW",
-      apply_url: "https://flutterwave.com/careers",
+      apply_url: "https://boards.greenhouse.io/flutterwave/jobs/5201948",
       contact_email: "careers@flutterwave.com",
       remote_accessible_kenya: 1,
       posted_date: "2026-10-03",
@@ -865,6 +889,7 @@ function seedDatabase() {
 
     // 7. CTO / VP OF ENGINEERING / EXECUTIVE
     {
+      original_job_id: "KWAN-CTO-2026",
       title: "Chief Technology Officer (CTO)",
       company: "Kwanza Agritech & Logistics (Series A)",
       company_domain: "kwanza-agritech.co.ke",
@@ -883,7 +908,7 @@ function seedDatabase() {
       credibility_score: 94,
       brs_verified: 1,
       scam_risk: "LOW",
-      apply_url: "https://kwanza-agritech.co.ke/careers",
+      apply_url: "https://kwanza-agritech.co.ke/careers/chief-technology-officer-cto-2026",
       contact_email: "board@kwanza-agritech.co.ke",
       remote_accessible_kenya: 1,
       posted_date: "2026-10-02",
@@ -892,6 +917,7 @@ function seedDatabase() {
 
     // 8. DATA SCIENCE & AI / ML SPECIALIST
     {
+      original_job_id: "GOOG-AI-12849",
       title: "AI & Machine Learning Engineer (LLMs & Speech Tech)",
       company: "Google Africa Product Development Centre",
       company_domain: "google.com",
@@ -910,7 +936,7 @@ function seedDatabase() {
       credibility_score: 99,
       brs_verified: 1,
       scam_risk: "LOW",
-      apply_url: "https://careers.google.com",
+      apply_url: "https://www.google.com/about/careers/applications/jobs/results/12849102948123",
       contact_email: "africa-talent@google.com",
       remote_accessible_kenya: 1,
       posted_date: "2026-10-10",
@@ -919,6 +945,7 @@ function seedDatabase() {
 
     // 9. QA / AUTOMATION SPECIALIST
     {
+      original_job_id: "ANDE-QA-4910",
       title: "Senior QA Automation Engineer (SDET - Playwright & Python)",
       company: "Andela Kenya",
       company_domain: "andela.com",
@@ -933,11 +960,11 @@ function seedDatabase() {
       currency_display: "KES",
       description: "Design automated test suites for distributed microservices and web applications. Implement end-to-end testing with Playwright, performance benchmarking with k6, and automated regression testing in GitHub Actions.",
       requirements: "3+ years as a Software Development Engineer in Test (SDET); Hands-on proficiency in Playwright, Cypress, or Selenium with TypeScript/Python; Strong knowledge of API testing (Postman, Newman).",
-      benefits: "100% Remote flexibility; Coworking space reimbursement across Kenya; Learning stipend (\$1,500/yr); Private health insurance.",
+      benefits: "100% Remote flexibility; Coworking space reimbursement across Kenya; Learning stipend ($1,500/yr); Private health insurance.",
       credibility_score: 95,
       brs_verified: 1,
       scam_risk: "LOW",
-      apply_url: "https://andela.com/careers",
+      apply_url: "https://boards.greenhouse.io/andela/jobs/4910283",
       contact_email: "recruiting@andela.com",
       remote_accessible_kenya: 1,
       posted_date: "2026-10-06",
@@ -946,6 +973,7 @@ function seedDatabase() {
 
     // 10. SCAM / SUSPICIOUS WARNING JOB (To demonstrate credibility analysis and scam alert engine)
     {
+      original_job_id: "APEX-PHISH-419",
       title: "[SUSPICIOUS] Data Entry & Junior Python Coder - Immediate Hire",
       company: "Apex Global Tech Careers (Unverified)",
       company_domain: "apex-global-careers.freehosting.site",
@@ -964,7 +992,7 @@ function seedDatabase() {
       credibility_score: 12,
       brs_verified: 0,
       scam_risk: "HIGH",
-      apply_url: "http://apex-global-careers.freehosting.site",
+      apply_url: "http://apex-global-careers.freehosting.site/jobs/apply?ref=phish419",
       contact_email: "hr.recruiter.apexkenya@gmail.com",
       remote_accessible_kenya: 1,
       posted_date: "2026-10-13",

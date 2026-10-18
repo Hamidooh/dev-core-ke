@@ -81,7 +81,7 @@ Unlike traditional job boards that aggregate dead links, redirect candidates thr
 * **24/7 Keep-Alive Self-Heartbeat:** Built-in 10-minute heartbeat (`/api/ping`) that keeps cloud instances (such as Render free-tier containers) active without spin-down.
 
 ### 4. Dedicated Decoupled Admin Mission Control
-* **Isolated Private Portal:** Completely separated from the public-facing client interface (`/admin-portal` or `/admin`).
+* **Isolated Private Portal:** Accessible via a decoupled, private administrative interface.
 * **SHA-256 PIN Authentication:** Timing-safe PIN verification guarding operational telemetry and admin tooling.
 * **Live Operational Telemetry:**
   * Real-time counters: Total pageviews, all-time unique visitors, today's pageviews/uniques, and active 30-minute users.
@@ -172,19 +172,18 @@ node server.js
 ```
 
 ### 3. Open the Application
-* **Public Candidate Portal:** Navigate to [http://localhost:3000](http://localhost:3000)
-* **Private Admin Mission Control:** Navigate to [http://localhost:3000/admin-portal](http://localhost:3000/admin-portal)
+Navigate to [http://localhost:3000](http://localhost:3000) in your web browser.
 
 ---
 
 ## ⚙️ Configuration & Environment Variables
 
-The application runs out of the box with safe defaults, but can be configured via environment variables:
+The application runs out of the box with safe defaults, but can be customized via environment variables in production:
 
 | Variable | Default Value | Description |
 | :--- | :---: | :--- |
 | `PORT` | `3000` | Port for the HTTP server to listen on. |
-| `ADMIN_PIN` | `devcore2026` | Developer PIN required to unlock the Admin Mission Control console. |
+| `ADMIN_PIN` | `(User Defined)` | Developer secret PIN configured for private console operations. |
 | `RENDER_EXTERNAL_URL` | *(None)* | Set automatically by Render for the 24/7 keep-alive heartbeat loop. |
 | `NODE_ENV` | `development` | Runtime environment mode (`production` / `development`). |
 
@@ -207,12 +206,6 @@ The application runs out of the box with safe defaults, but can be configured vi
 | `GET` | `/api/roles-guide` | Comprehensive breakdown of the 7 seniority spectrums. |
 | `GET` | `/api/scanner/status` | Live scanner status, cooldown timers, and execution history. |
 | `POST` | `/api/scanner/trigger` | Trigger immediate scan (protected by 10-minute cooldown shield). |
-
-### Protected Admin Endpoints
-
-| Method | Endpoint | Query / Body | Description |
-| :--- | :--- | :--- | :--- |
-| `GET` | `/api/admin/analytics` | `?pin=<ADMIN_PIN>` | Returns full visitor telemetry, daily charts, and scanner status. |
 
 ---
 

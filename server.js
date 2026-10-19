@@ -95,10 +95,13 @@ function createFallbackDb(jsonFilePath) {
         };
       }
 
-      if (cleanSql.startsWith('SELECT * FROM jobs WHERE 1=1')) {
+      if (cleanSql.startsWith('SELECT * FROM jobs WHERE 1=1') || cleanSql.includes('FROM jobs WHERE (is_expired = 0')) {
         return {
           all(params = {}) {
-            let list = [...state.jobs];
+            let list = [...state.jobs].filter(j => !j.is_expired);
+            if (params.minPostedDate) {
+              list = list.filter(j => (j.posted_date || '') >= params.minPostedDate);
+            }
             if (params.search) {
               const q = params.search.replace(/%/g, '').toLowerCase();
               list = list.filter(j => 
@@ -134,10 +137,18 @@ function createFallbackDb(jsonFilePath) {
         };
       }
 
-      if (cleanSql === 'SELECT * FROM jobs') {
+      if (cleanSql.includes('FROM jobs ORDER BY posted_date DESC')) {
         return {
           all() {
-            return [...state.jobs];
+            return [...state.jobs].sort((a, b) => (b.posted_date || '').localeCompare(a.posted_date || '') || (b.id - a.id));
+          }
+        };
+      }
+
+      if (cleanSql === 'SELECT * FROM jobs' || cleanSql === 'SELECT * FROM jobs WHERE (is_expired = 0 OR is_expired IS NULL)') {
+        return {
+          all() {
+            return [...state.jobs].filter(j => !j.is_expired);
           }
         };
       }
@@ -150,6 +161,46 @@ function createFallbackDb(jsonFilePath) {
             state.jobs.push(newJob);
             saveState();
             return { lastInsertRowid: newId, changes: 1 };
+          }
+        };
+      }
+
+      if (cleanSql.startsWith('UPDATE jobs SET is_expired = 1')) {
+        return {
+          run(cutoffDate) {
+            let count = 0;
+            state.jobs.forEach(j => {
+              if (j.posted_date < cutoffDate && !j.is_expired) {
+                j.is_expired = 1;
+                count++;
+              }
+            });
+            if (count > 0) saveState();
+            return { changes: count };
+          }
+        };
+      }
+
+      if (cleanSql.startsWith('DELETE FROM jobs WHERE is_expired = 1')) {
+        return {
+          run() {
+            const before = state.jobs.length;
+            state.jobs = state.jobs.filter(j => !j.is_expired);
+            const changes = before - state.jobs.length;
+            if (changes > 0) saveState();
+            return { changes };
+          }
+        };
+      }
+
+      if (cleanSql.startsWith('DELETE FROM jobs WHERE id = ?')) {
+        return {
+          run(id) {
+            const before = state.jobs.length;
+            state.jobs = state.jobs.filter(j => j.id !== id);
+            const changes = before - state.jobs.length;
+            if (changes > 0) saveState();
+            return { changes };
           }
         };
       }
@@ -279,6 +330,9 @@ try {
   db = createFallbackDb(DB_JSON_FILE);
 }
 
+// Maximum active lifespan for a job posting (industry standard: 30 days)
+const MAX_JOB_AGE_DAYS = 30;
+
 // Helper to extract official/original requisition ID from URL or attributes
 function extractOriginalJobId(job) {
   if (job.original_job_id && String(job.original_job_id).trim() !== '') {
@@ -290,17 +344,25 @@ function extractOriginalJobId(job) {
   const lkMatch = url.match(/\/jobs\/view\/(\d+)/i);
   if (lkMatch) return 'LK-' + lkMatch[1];
 
-  // Arbeitnow slug ending with numeric ID: senior-engineer-171975
-  const anMatch = url.match(/-(\d+)(?:\/?$|\?)/);
-  if (anMatch) return anMatch[1];
+  // Taleo job parameter: job=SAF-DAR-4091 or job=12345
+  const taleoMatch = url.match(/[?&]job=([A-Z0-9\-_]+)/i);
+  if (taleoMatch) return taleoMatch[1];
 
-  // Jobicy /jobs/155221-slug
-  const jbMatch = url.match(/\/jobs\/(\d+)/i);
+  // Jobicy /jobs/155221-slug (Check 5+ digit ID before Arbeitnow slug match)
+  const jbMatch = url.match(/jobicy\.com\/jobs\/(\d+)/i) || url.match(/\/jobs\/(\d{5,10})/i);
   if (jbMatch) return jbMatch[1];
 
+  // Arbeitnow slug ending with numeric ID: senior-engineer-171975
+  const anMatch = url.match(/-(\d{4,10})(?:\/?$|\?)/);
+  if (anMatch) return anMatch[1];
+
   // RemoteOK /remote-jobs/1029384
-  const roMatch = url.match(/remoteok\.com\/(?:remote-jobs\/)?(\d+)/i);
+  const roMatch = url.match(/remoteok\.(?:com|io)\/(?:remote-jobs\/)?.*?(\d{5,10})/i) || url.match(/remoteok\.(?:com|io)\/(?:remote-jobs\/)?(\d+)/i);
   if (roMatch) return roMatch[1];
+
+  // General ATS (Greenhouse, Lever, BambooHR): /jobs/4829103 or /careers/48
+  const atsMatch = url.match(/(?:jobs|careers)\/(\d{2,10})(?:\/?$|\?)/i);
+  if (atsMatch) return atsMatch[1];
 
   // Generic numeric requisition: /1839210/
   const numMatch = url.match(/\/(\d{4,12})(?:\/|$|\?)/);
@@ -309,6 +371,147 @@ function extractOriginalJobId(job) {
   // Company prefix + ID fallback
   const compPrefix = (job.company || 'JOB').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4) || 'DEV';
   return `${compPrefix}-${job.id || Math.floor(1000 + Math.random() * 9000)}`;
+}
+
+// Clean & Normalize URL for deduplication (strips marketing tracking parameters)
+function cleanApplyUrl(url) {
+  if (!url) return '';
+  try {
+    const u = new URL(url);
+    const trackingParams = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'fbclid', 'gclid', 'ref', 'source'];
+    for (const p of trackingParams) {
+      u.searchParams.delete(p);
+    }
+    return u.toString().toLowerCase().replace(/\/$/, '');
+  } catch (e) {
+    return url.toLowerCase().trim().replace(/\/$/, '');
+  }
+}
+
+// Normalize company names to catch variations like "Lemon.io" vs "Lemon.io Ltd"
+function normalizeCompany(str) {
+  return (str || '')
+    .toLowerCase()
+    .replace(/\b(plc|ltd|limited|inc|corporation|corp|technologies|solutions|group|holdings|partner|platform|hq)\b/g, '')
+    .replace(/[^a-z0-9]/g, '')
+    .trim();
+}
+
+// Normalize titles to catch variations like "Full-Stack" vs "Full stack", "Sr." vs "Senior"
+function normalizeTitle(str) {
+  return (str || '')
+    .toLowerCase()
+    .replace(/\b(full-stack|full stack)\b/g, 'fullstack')
+    .replace(/\b(sr\.|sr)\b/g, 'senior')
+    .replace(/\b(jr\.|jr)\b/g, 'junior')
+    .replace(/\((remote|kenya|hybrid|worldwide)\)/gi, '')
+    .replace(/[^a-z0-9]/g, '')
+    .trim();
+}
+
+// Check if two jobs are duplicates of each other
+function isJobDuplicate(jobA, jobB) {
+  if (!jobA || !jobB) return false;
+
+  // 1. Same normalized apply_url
+  const urlA = cleanApplyUrl(jobA.apply_url);
+  const urlB = cleanApplyUrl(jobB.apply_url);
+  if (urlA && urlB && urlA === urlB) return true;
+
+  // 2. Same valid original_job_id at same company
+  const idA = String(jobA.original_job_id || '').trim();
+  const idB = String(jobB.original_job_id || '').trim();
+  const compA = normalizeCompany(jobA.company);
+  const compB = normalizeCompany(jobB.company);
+
+  if (idA && idB && idA === idB && idA.length > 3 && compA === compB) {
+    return true;
+  }
+
+  // 3. Exact normalized company + title
+  const titleA = normalizeTitle(jobA.title);
+  const titleB = normalizeTitle(jobB.title);
+  if (compA && compB && compA.length > 2 && titleA.length > 3 && compA === compB && titleA === titleB) {
+    return true;
+  }
+
+  return false;
+}
+
+// Maintenance Engine: Purges expired (>30 days) and duplicate postings
+function cleanupExpiredAndDuplicateJobs() {
+  const now = new Date();
+  const cutoffDate = new Date(now.getTime() - MAX_JOB_AGE_DAYS * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+  let expiredCount = 0;
+  let duplicateCount = 0;
+
+  try {
+    // 1. Mark expired jobs in database
+    const expStmt = db.prepare('UPDATE jobs SET is_expired = 1 WHERE posted_date < ? AND (is_expired = 0 OR is_expired IS NULL)');
+    const expRes = expStmt.run(cutoffDate);
+    expiredCount = expRes.changes || 0;
+
+    // 2. Purge marked expired jobs from active table for faster navigation
+    const delExpRes = db.prepare('DELETE FROM jobs WHERE is_expired = 1').run();
+    if (delExpRes.changes > 0) expiredCount = delExpRes.changes;
+
+    // 3. Identify and delete duplicates
+    const allActive = db.prepare('SELECT * FROM jobs ORDER BY posted_date DESC, id DESC').all();
+    const seenUrls = new Map();
+    const seenKeys = new Map();
+    const duplicateIds = [];
+
+    for (const job of allActive) {
+      const cleanUrl = cleanApplyUrl(job.apply_url);
+      const compKey = normalizeCompany(job.company);
+      const titleKey = normalizeTitle(job.title);
+      const compTitleKey = compKey + '::' + titleKey;
+
+      let isDup = false;
+      if (cleanUrl && seenUrls.has(cleanUrl)) {
+        isDup = true;
+      } else if (compKey.length > 2 && titleKey.length > 3 && seenKeys.has(compTitleKey)) {
+        isDup = true;
+      }
+
+      if (isDup) {
+        duplicateIds.push(job.id);
+      } else {
+        if (cleanUrl) seenUrls.set(cleanUrl, job.id);
+        if (compKey.length > 2 && titleKey.length > 3) seenKeys.set(compTitleKey, job.id);
+      }
+    }
+
+    if (duplicateIds.length > 0) {
+      const delDup = db.prepare('DELETE FROM jobs WHERE id = ?');
+      for (const id of duplicateIds) {
+        delDup.run(id);
+        duplicateCount++;
+      }
+    }
+
+    // 4. Synchronize clean state to JSON backup file
+    const cleanJobs = db.prepare('SELECT * FROM jobs ORDER BY posted_date DESC, id DESC').all();
+    const allReviews = db.prepare('SELECT * FROM reviews').all();
+    const allAudits = db.prepare('SELECT * FROM credibility_audits').all();
+    const allLogs = db.prepare('SELECT * FROM scanner_logs').all();
+
+    fs.writeFileSync(DB_JSON_FILE, JSON.stringify({
+      jobs: cleanJobs,
+      reviews: allReviews,
+      credibility_audits: allAudits,
+      scanner_logs: allLogs
+    }, null, 2), 'utf8');
+
+    if (expiredCount > 0 || duplicateCount > 0) {
+      console.log(`[Maintenance] 🧹 Cleaned up catalog: Purged ${expiredCount} expired roles (> 30 days) and ${duplicateCount} duplicate roles. Total active unique roles: ${cleanJobs.length}.`);
+    }
+  } catch (err) {
+    console.warn('[Maintenance] Cleanup sweep notice:', err.message);
+  }
+
+  return { expiredCount, duplicateCount };
 }
 
 // Setup Database Schema
@@ -404,11 +607,22 @@ function initDatabase() {
     // Column already exists, safe to ignore
   }
 
+  // Migration: Ensure is_expired column exists
+  try {
+    db.exec('ALTER TABLE jobs ADD COLUMN is_expired INTEGER DEFAULT 0;');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_jobs_expired_date ON jobs(is_expired, posted_date);');
+  } catch (e) {
+    // Column or index already exists, safe to ignore
+  }
+
   // Backfill any missing original_job_id values on existing records
   backfillOriginalJobIds();
 
   // Synchronize all verified positions on startup
   syncDatabaseRoles();
+
+  // Run maintenance sweep: purges expired (>30 days) and duplicate postings
+  cleanupExpiredAndDuplicateJobs();
 
   // Ensure initial baseline analytics telemetry
   seedBaselineVisitsIfEmpty();
@@ -436,11 +650,14 @@ function syncDatabaseRoles() {
     seedDatabase();
   }
 
-  // Ensure ALL roles from devcircle_data.json are synchronized into the database
+  // Ensure ALL active, non-expired roles from devcircle_data.json are synchronized into the database
   if (fs.existsSync(DB_JSON_FILE)) {
     try {
       const data = JSON.parse(fs.readFileSync(DB_JSON_FILE, 'utf8'));
       if (Array.isArray(data.jobs) && data.jobs.length > 0) {
+        const now = new Date();
+        const cutoffDate = new Date(now.getTime() - MAX_JOB_AGE_DAYS * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
         const checkExists = db.prepare(`
           SELECT id, apply_url, original_job_id FROM jobs 
           WHERE (@original_job_id != '' AND original_job_id = @original_job_id)
@@ -471,30 +688,39 @@ function syncDatabaseRoles() {
 
         let inserted = 0;
         let updated = 0;
+        let expiredSkipped = 0;
         for (const job of data.jobs) {
+          // Reject expired jobs on synchronization
+          if (job.posted_date && job.posted_date < cutoffDate) {
+            expiredSkipped++;
+            continue;
+          }
+
           const originalId = job.original_job_id || extractOriginalJobId(job);
+          const cleanUrl = cleanApplyUrl(job.apply_url);
           const exists = checkExists.get({
             original_job_id: originalId,
             title: (job.title || '').trim(),
             company: (job.company || '').trim(),
-            apply_url: (job.apply_url || '').trim()
+            apply_url: cleanUrl || (job.apply_url || '').trim()
           });
           if (!exists) {
             const { id, ...jobData } = job;
             jobData.original_job_id = originalId;
+            if (cleanUrl) jobData.apply_url = cleanUrl;
             insertJob.run(jobData);
             inserted++;
           } else if (job.apply_url && (exists.apply_url !== job.apply_url || exists.original_job_id !== originalId)) {
             updateJobStmt.run({
               id: exists.id,
-              apply_url: job.apply_url,
+              apply_url: cleanUrl || job.apply_url,
               original_job_id: originalId
             });
             updated++;
           }
         }
-        if (inserted > 0 || updated > 0) {
-          console.log(`✅ Synchronized database: Ingested ${inserted} missing, updated ${updated} direct requisition URLs.`);
+        if (inserted > 0 || updated > 0 || expiredSkipped > 0) {
+          console.log(`✅ Synchronized database: Ingested ${inserted} fresh roles, updated ${updated} URLs, filtered ${expiredSkipped} expired roles (> 30 days).`);
         }
       }
 
@@ -1156,7 +1382,7 @@ function analyzeCredibility(input) {
 
 // Compute market salary and roles analytics
 function getAnalytics() {
-  const jobs = db.prepare('SELECT * FROM jobs').all();
+  const jobs = db.prepare('SELECT * FROM jobs WHERE (is_expired = 0 OR is_expired IS NULL)').all();
   const reviews = db.prepare('SELECT * FROM reviews').all();
 
   // Roles spectrum stats
@@ -1549,23 +1775,42 @@ function stripHtml(html) {
 }
 
 function classifySeniority(title, description = '') {
+  const tit = (title || '').toLowerCase();
   const t = `${title} ${description}`.toLowerCase();
-  if (t.includes('attachment') || t.includes('industrial trainee') || t.includes('nita') || t.includes('student intern') || t.includes('attaché') || t.includes('attachee')) {
+
+  // Check executive / lead in title first
+  if (tit.includes('cto') || tit.includes('chief technology') || tit.includes('vp of engineering') || tit.includes('head of engineering')) {
+    return 'cto';
+  }
+  if (tit.includes('engineering manager') || tit.includes('lead engineer') || tit.includes('tech lead') || tit.includes('team lead') || tit.includes('lead developer') || tit.includes('technical lead')) {
+    return 'lead_manager';
+  }
+  if (tit.includes('senior') || tit.includes('staff') || tit.includes('principal') || tit.includes('architect') || tit.includes('sr.') || tit.includes('lead software')) {
+    return 'senior';
+  }
+
+  // Check attachment explicitly in title (or explicit industrial attachment phrase in text)
+  if (tit.includes('attachment') || tit.includes('industrial trainee') || tit.includes('nita') || tit.includes('student intern') || tit.includes('attaché') || tit.includes('attachee') || t.includes('industrial attachment')) {
     return 'attachment';
   }
-  if (t.includes('graduate trainee') || t.includes('intern') || t.includes('internship') || t.includes('apprentice') || t.includes('fellowship')) {
+
+  // Check internship in title or text
+  if (tit.includes('graduate trainee') || tit.includes('intern') || tit.includes('internship') || tit.includes('apprentice') || tit.includes('fellowship') || t.includes('graduate internship')) {
     return 'internship';
   }
-  if (t.includes('junior') || t.includes('entry level') || t.includes('entry-level') || t.includes('associate') || t.includes('trainee') || t.includes('0-2 year') || t.includes('0-1 year')) {
+
+  // Check junior in title
+  if (tit.includes('junior') || tit.includes('entry level') || tit.includes('entry-level') || tit.includes('associate') || tit.includes('trainee') || t.includes('0-2 year') || t.includes('0-1 year')) {
     return 'junior';
   }
+
   if (t.includes('cto') || t.includes('chief technology') || t.includes('vp of engineering') || t.includes('vice president of engineering') || t.includes('head of engineering')) {
     return 'cto';
   }
   if (t.includes('engineering manager') || t.includes('lead engineer') || t.includes('tech lead') || t.includes('team lead') || t.includes('lead developer') || t.includes('technical lead')) {
     return 'lead_manager';
   }
-  if (t.includes('senior') || t.includes('staff') || t.includes('principal') || t.includes('architect') || t.includes('sr.') || t.includes('5+ year') || t.includes('lead software')) {
+  if (t.includes('senior') || t.includes('staff') || t.includes('principal') || t.includes('architect') || t.includes('sr.') || t.includes('5+ year')) {
     return 'senior';
   }
   return 'mid';
@@ -2873,13 +3118,22 @@ async function runHourlyRoleScan(isManual = false) {
     `);
 
     let addedCount = 0;
+    const nowTs = new Date();
+    const cutoffDate = new Date(nowTs.getTime() - MAX_JOB_AGE_DAYS * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
     for (const job of discoveredRoles) {
+      // Reject any discovered role older than 30 days
+      if (job.posted_date && job.posted_date < cutoffDate) {
+        continue;
+      }
+
       const originalId = job.original_job_id || extractOriginalJobId(job);
+      const cleanUrl = cleanApplyUrl(job.apply_url);
       const existing = checkExists.get({
         original_job_id: originalId,
         title: job.title.trim(),
         company: job.company.trim(),
-        apply_url: (job.apply_url || '').trim()
+        apply_url: cleanUrl || (job.apply_url || '').trim()
       });
 
       if (!existing) {
@@ -2910,7 +3164,7 @@ async function runHourlyRoleScan(isManual = false) {
           credibility_score: audit.score,
           brs_verified: audit.score >= 80 ? 1 : 0,
           scam_risk: audit.verdict === 'HIGH_RISK_SCAM' ? 'HIGH' : (audit.verdict === 'MODERATE_VERIFY_FURTHER' ? 'MODERATE' : 'LOW'),
-          apply_url: job.apply_url || '',
+          apply_url: cleanUrl || job.apply_url || '',
           contact_email: job.contact_email || '',
           remote_accessible_kenya: 1,
           posted_date: job.posted_date || new Date().toISOString().split('T')[0],
@@ -2919,6 +3173,9 @@ async function runHourlyRoleScan(isManual = false) {
         addedCount++;
       }
     }
+
+    // Run automated maintenance to guarantee zero duplicates and zero expired jobs (> 30 days)
+    cleanupExpiredAndDuplicateJobs();
 
     const logMessage = `Scanned ${discoveredRoles.length} roles. Ingested ${addedCount} new verified postings. Sources: ${sourcesSucceeded.join(', ')}.${sourcesFailed.length ? ' Warnings: ' + sourcesFailed.join('; ') : ''}`;
     const status = sourcesFailed.length > 0 && sourcesSucceeded.length === 0 ? 'FAILED' : 'SUCCESS';
@@ -2934,24 +3191,6 @@ async function runHourlyRoleScan(isManual = false) {
       status,
       message: logMessage
     });
-
-    if (addedCount > 0) {
-      try {
-        const allJobs = db.prepare('SELECT * FROM jobs').all();
-        const allReviews = db.prepare('SELECT * FROM reviews').all();
-        const allAudits = db.prepare('SELECT * FROM credibility_audits').all();
-        const allLogs = db.prepare('SELECT * FROM scanner_logs').all();
-        fs.writeFileSync(DB_JSON_FILE, JSON.stringify({
-          jobs: allJobs,
-          reviews: allReviews,
-          credibility_audits: allAudits,
-          scanner_logs: allLogs
-        }, null, 2), 'utf8');
-        console.log(`[Scanner] 💾 Saved ${allJobs.length} roles to ${DB_JSON_FILE}`);
-      } catch (err) {
-        console.error('[Scanner] Failed to persist data to JSON:', err.message);
-      }
-    }
 
     lastScanCompletedTimestamp = Date.now();
     scannerState.lastScanTimestamp = lastScanCompletedTimestamp;
@@ -3287,8 +3526,14 @@ const server = http.createServer(async (req, res) => {
       const min_credibility = parseInt(reqUrl.searchParams.get('min_credibility') || '0', 10);
       const sort = reqUrl.searchParams.get('sort') || 'newest';
 
-      let query = 'SELECT * FROM jobs WHERE 1=1';
-      const params = {};
+      const now = new Date();
+      const minPostedDate = new Date(now.getTime() - MAX_JOB_AGE_DAYS * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      const todayStr = now.toISOString().split('T')[0];
+      const weekAgoStr = new Date(now.getTime() - 7 * 86400000).toISOString().split('T')[0];
+      const monthAgoStr = new Date(now.getTime() - 30 * 86400000).toISOString().split('T')[0];
+
+      let query = 'SELECT * FROM jobs WHERE (is_expired = 0 OR is_expired IS NULL) AND posted_date >= @minPostedDate';
+      const params = { minPostedDate };
 
       if (q) {
         query += ` AND (title LIKE @search OR company LIKE @search OR tags LIKE @search OR description LIKE @search)`;
@@ -3310,12 +3555,6 @@ const server = http.createServer(async (req, res) => {
         query += ` AND credibility_score >= @min_credibility`;
         params.min_credibility = min_credibility;
       }
-
-      // Date Range Filters
-      const now = new Date();
-      const todayStr = now.toISOString().split('T')[0];
-      const weekAgoStr = new Date(now.getTime() - 7 * 86400000).toISOString().split('T')[0];
-      const monthAgoStr = new Date(now.getTime() - 30 * 86400000).toISOString().split('T')[0];
 
       if (sort === 'today') {
         query += ` AND posted_date >= @today`;
@@ -3478,7 +3717,11 @@ const server = http.createServer(async (req, res) => {
   if (method === 'POST' && pathname === '/api/jobs') {
     try {
       const body = await parseJsonBody(req);
-      const audit = analyzeCredibility(body);
+      if (!body.title || !body.company) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'error', message: 'Job title and company name are required.' }));
+        return;
+      }
 
       let applyUrl = (body.apply_url || '').trim();
       if (!applyUrl) {
@@ -3488,6 +3731,31 @@ const server = http.createServer(async (req, res) => {
           applyUrl = `mailto:${body.contact_email}?subject=Application%20for%20${encodeURIComponent(body.title)}%20at%20${encodeURIComponent(body.company)}`;
         }
       }
+
+      const cleanUrl = cleanApplyUrl(applyUrl);
+
+      // Duplicate prevention: check normalized company and title or cleaned apply URL
+      const checkDup = db.prepare(`
+        SELECT id FROM jobs 
+        WHERE (LOWER(title) = LOWER(@title) AND LOWER(company) = LOWER(@company))
+           OR (@cleanUrl != '' AND apply_url = @cleanUrl)
+        LIMIT 1
+      `).get({
+        title: body.title.trim(),
+        company: body.company.trim(),
+        cleanUrl: cleanUrl || ''
+      });
+
+      if (checkDup) {
+        res.writeHead(409, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          status: 'duplicate',
+          message: 'An active listing for this role and company already exists on DEV CORE KE. Duplicate offers are automatically rejected.'
+        }));
+        return;
+      }
+
+      const audit = analyzeCredibility(body);
 
       db.prepare(`
         INSERT INTO jobs (
@@ -3514,13 +3782,13 @@ const server = http.createServer(async (req, res) => {
         salary_usd_min: parseInt(body.salary_usd_min || '400', 10),
         salary_usd_max: parseInt(body.salary_usd_max || '800', 10),
         currency_display: body.currency_display || 'KES',
-        description: body.description,
+        description: body.description || 'Software Engineering role.',
         requirements: body.requirements || '',
         benefits: body.benefits || '',
         credibility_score: audit.score,
         brs_verified: audit.score >= 80 ? 1 : 0,
         scam_risk: audit.verdict === 'HIGH_RISK_SCAM' ? 'HIGH' : (audit.verdict === 'MODERATE_VERIFY_FURTHER' ? 'MODERATE' : 'LOW'),
-        apply_url: applyUrl,
+        apply_url: cleanUrl || applyUrl,
         contact_email: body.contact_email || '',
         remote_accessible_kenya: 1,
         posted_date: new Date().toISOString().split('T')[0],
